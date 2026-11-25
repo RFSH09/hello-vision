@@ -21,7 +21,7 @@ def _page(title: str, body: str) -> str:
     )
 
 
-def list_page(rows: list[dict[str, Any]], token_q: str = "") -> str:
+def list_page(rows: list[dict[str, Any]]) -> str:
     """Overview of stored sessions; sessions needing review are highlighted."""
     lines = ["<h1>Sessions</h1><table><tr><th>session</th><th>review</th><th>cart</th></tr>"]
     for r in rows:
@@ -29,15 +29,13 @@ def list_page(rows: list[dict[str, Any]], token_q: str = "") -> str:
         flag = "<span class=warn>needs review</span>" if r["needs_review"] else "ok"
         sid = html.escape(r["session_id"], quote=True)
         lines.append(
-            f"<tr><td><a href='/review/{sid}{token_q}'>{sid}</a></td><td>{flag}</td><td>{cart}</td></tr>"
+            f"<tr><td><a href='/review/{sid}'>{sid}</a></td><td>{flag}</td><td>{cart}</td></tr>"
         )
     lines.append("</table>")
     return _page("Sessions", "".join(lines))
 
 
-def session_page(
-    summary: dict[str, Any], correction: dict[str, Any] | None, token: str = ""
-) -> str:
+def session_page(summary: dict[str, Any], correction: dict[str, Any] | None) -> str:
     """Replay page: frame slider over the evidence clip, cart, reasons, events, correction form."""
     sid = html.escape(summary["session_id"], quote=True)
     n = int(summary["num_frames"])
@@ -52,13 +50,12 @@ def session_page(
     status = "needs review" if summary["needs_review"] else "auto"
     # json.dumps output is placed in a <script>; "<" is escaped so it cannot close the tag
     safe_prefill = prefill.replace("<", "\\u003c")
-    token_js = json.dumps(token).replace("<", "\\u003c")
     body = f"""
-<p><a href="/review?token={html.escape(token, quote=True)}">&larr; all sessions</a></p>
+<p><a href="/review">&larr; all sessions</a></p>
 <h1>Session {sid}</h1>
 <p>Status: <b>{status}</b> | confidence {summary["session_confidence"]:.2f} | model {html.escape(summary["model_version"])}</p>
 <ul>{reasons}</ul>
-<img id=f alt="evidence frame (faces blurred)" src="/review/{sid}/frame/0.jpg?token={html.escape(token, quote=True)}">
+<img id=f alt="evidence frame (faces blurred)" src="/review/{sid}/frame/0.jpg">
 <p><input id=s type=range min=0 max={max(0, n - 1)} value=0 style="width:100%"> frame <span id=i>0</span> / {n}</p>
 <h2>Events</h2><table><tr><th>action</th><th>sku</th><th>frames</th><th>conf</th></tr>{events}</table>
 <h2>Correct the cart</h2>
@@ -66,16 +63,32 @@ def session_page(
 <textarea id=c rows=5 cols=40></textarea><br>
 <input id=note placeholder="note (optional)"> <button id=b>Save correction</button> <span id=m></span>
 <script>
-const T={token_js}, sid="{sid}", s=document.getElementById('s'), f=document.getElementById('f');
-s.oninput=()=>{{document.getElementById('i').textContent=s.value;f.src=`/review/${{sid}}/frame/${{s.value}}.jpg?token=${{T}}`}};
+const sid="{sid}", s=document.getElementById('s'), f=document.getElementById('f');
+s.oninput=()=>{{document.getElementById('i').textContent=s.value;f.src=`/review/${{sid}}/frame/${{s.value}}.jpg`}};
 const pre={safe_prefill};
 document.getElementById('c').value=pre.map(x=>x.sku+' '+x.qty).join('\\n');
 document.getElementById('b').onclick=async()=>{{
   const items=document.getElementById('c').value.split('\\n').map(l=>l.trim()).filter(Boolean)
     .map(l=>{{const p=l.split(/\\s+/);return {{sku:p[0],qty:parseInt(p[1]||'1')}}}});
-  const r=await fetch(`/review/${{sid}}/correction?token=${{T}}`,{{method:'POST',headers:{{'Content-Type':'application/json'}},
+  const r=await fetch(`/review/${{sid}}/correction`,{{method:'POST',headers:{{'Content-Type':'application/json'}},
     body:JSON.stringify({{items,note:document.getElementById('note').value}})}});
   document.getElementById('m').textContent=r.ok?'saved':'error '+r.status;
 }};
 </script>"""
     return _page(f"Session {summary['session_id']}", body)
+
+
+def login_page() -> str:
+    """Token login form; the token is exchanged for an HttpOnly cookie, never kept in URLs."""
+    body = """
+<h1>Review login</h1>
+<input id=t type=password placeholder="review token" autocomplete=off>
+<button id=b>Log in</button> <span id=m></span>
+<script>
+document.getElementById('b').onclick=async()=>{
+  const r=await fetch('/review/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:document.getElementById('t').value})});
+  if(r.ok){location.href='/review'}else{document.getElementById('m').textContent='wrong token'}
+};
+</script>"""
+    return _page("Review login", body)

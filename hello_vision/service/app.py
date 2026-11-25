@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
+import threading
 import time
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
 from hello_vision.privacy.blur import FaceBlurrer
-from hello_vision.review.ui import list_page, session_page
+from hello_vision.review.ui import list_page, login_page, session_page
 from hello_vision.service.client import Dispatcher
 from hello_vision.service.evidence import (
     enqueue_to_label,
@@ -25,6 +28,7 @@ from hello_vision.service.evidence import (
 )
 from hello_vision.service.models import SessionRequest, to_payload
 from hello_vision.service.settings import Settings
+from hello_vision.service.signing import SIGNATURE_HEADER, TIMESTAMP_HEADER, verify
 from hello_vision.session.analyzer import SessionAnalyzer
 
 
@@ -40,6 +44,12 @@ class Correction(BaseModel):
 
     items: list[CorrectionItem]
     note: str = Field(default="", max_length=500)
+
+
+class Login(BaseModel):
+    """Body of ``POST /review/login``."""
+
+    token: str
 
 
 def create_app(
@@ -58,15 +68,41 @@ def create_app(
         "corrections_total": 0,
     }
 
+    cookie_name = "hv_review"
+
+    def cookie_value(token: str) -> str:
+        """Session cookie = HMAC of the token, so the token itself is never stored in a cookie."""
+        msg = b"review-session:" + token.encode()
+        return hmac.new(settings.hmac_secret.encode(), msg, hashlib.sha256).hexdigest()
+
     def auth(request: Request) -> None:
         token = settings.review_token
         if token is None:
             return
-        given = request.query_params.get("token") or request.headers.get(
-            "authorization", ""
-        ).removeprefix("Bearer ")
-        if not hmac.compare_digest(given, token):
-            raise HTTPException(401, "invalid or missing review token")
+        bearer = request.headers.get("authorization", "").removeprefix("Bearer ")
+        cookie = request.cookies.get(cookie_name, "")
+        if hmac.compare_digest(bearer, token) or hmac.compare_digest(cookie, cookie_value(token)):
+            return
+        raise HTTPException(401, "not logged in: open /review/login")
+
+    async def signed(request: Request) -> None:
+        """Require the HMAC signature (same scheme as the backend contract) on /session."""
+        body = await request.body()
+        ok = verify(
+            settings.hmac_secret,
+            body,
+            request.headers.get(TIMESTAMP_HEADER, ""),
+            request.headers.get(SIGNATURE_HEADER, ""),
+        )
+        if not ok:
+            raise HTTPException(401, "missing or invalid request signature")
+
+    locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
+    locks_guard = threading.Lock()
+
+    def session_lock(session_id: str) -> threading.Lock:
+        with locks_guard:
+            return locks[session_id]
 
     def folder(session_id: str) -> Path:
         try:
@@ -90,8 +126,12 @@ def create_app(
         lines.append(f"hello_vision_to_label_depth {len(list_to_label(settings.evidence_root))}")
         return "\n".join(lines) + "\n"
 
-    @app.post("/session")
+    @app.post("/session", dependencies=[Depends(signed)])
     def post_session(req: SessionRequest) -> dict[str, Any]:
+        with session_lock(req.session_id):  # two requests for one session run one after the other
+            return process_session(req)
+
+    def process_session(req: SessionRequest) -> dict[str, Any]:
         from sim.replay import replay_video  # local import: the simulator is optional
 
         out = folder(req.session_id)
@@ -124,20 +164,34 @@ def create_app(
         files = sorted(root.glob("*/result.json")) if root.exists() else []
         return [json.loads(p.read_text(encoding="utf-8")) for p in files]
 
+    @app.get("/review/login", response_class=HTMLResponse)
+    def review_login_page() -> str:
+        return login_page()
+
+    @app.post("/review/login")
+    def review_login(body: Login) -> Response:
+        token = settings.review_token
+        if token is None or not hmac.compare_digest(body.token, token):
+            raise HTTPException(401, "wrong token")
+        resp = JSONResponse({"status": "ok"})
+        resp.set_cookie(
+            cookie_name, cookie_value(token), httponly=True, samesite="strict", max_age=8 * 3600
+        )
+        return resp
+
     @app.get("/review", response_class=HTMLResponse, dependencies=[Depends(auth)])
-    def review_list(request: Request) -> str:
-        t = request.query_params.get("token")
-        return list_page(summaries(), f"?token={t}" if t else "")
+    def review_list() -> str:
+        return list_page(summaries())
 
     @app.get("/review/{session_id}", response_class=HTMLResponse, dependencies=[Depends(auth)])
-    def review_session(session_id: str, request: Request) -> str:
+    def review_session(session_id: str) -> str:
         d = folder(session_id)
         if not (d / "result.json").exists():
             raise HTTPException(404, "unknown session")
         summary = json.loads((d / "result.json").read_text(encoding="utf-8"))
         corr_path = d / "correction.json"
         corr = json.loads(corr_path.read_text(encoding="utf-8")) if corr_path.exists() else None
-        return session_page(summary, corr, request.query_params.get("token", ""))
+        return session_page(summary, corr)
 
     @app.get("/review/{session_id}/frame/{index}.jpg", dependencies=[Depends(auth)])
     def review_frame(session_id: str, index: int) -> Response:

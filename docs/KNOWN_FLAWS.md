@@ -29,8 +29,8 @@ Collected while building M0-M7. Ordered roughly by how much they block a real pi
 ## Service, privacy, operations
 
 12. Face blur was never run on real faces; no fixed blur regions are configured by default.
-13. The review UI passes its token in the URL query string (ends up in logs/history); JavaScript was never tested in a browser.
-14. Outbox is one file per session with no cross-process locking; `/session` idempotency has a check-then-write race.
+13. ~~Review token in the URL~~ FIXED (cookie login, no tokens in URLs; `/session` now signed). Still open: the review page JavaScript was never tested in a browser.
+14. ~~Outbox/`/session` races~~ FIXED within one process (exclusive file create, per-session lock, tested with threads). Still open: several service processes sharing one folder are not coordinated.
 15. Docker image never built (no Docker here); systemd unit never run; the watchdog socket test is skipped on Windows;
     exports (TensorRT/OpenVINO/RKNN) never run; no board measured.
 16. Transitive dependency licenses (FastAPI stack and others) not audited; `docs/LICENSES.md` candidates are unverified.
@@ -40,6 +40,6 @@ Collected while building M0-M7. Ordered roughly by how much they block a real pi
 
 18. Only M0 has a pull request; GitHub had an outage when merging it. M1-M7 branches are local and unpushed, and CI has never run
     on them (only locally: ruff, mypy, pytest).
-19. No `.gitattributes`: every commit prints LF/CRLF warnings on Windows.
+19. ~~No `.gitattributes`~~ FIXED (`* text=auto eol=lf`).
 20. The default `uv` interpreter here is Python 3.14; CI tests 3.11 and 3.12 but they were not run locally.
 21. Weak labels from the current system's carts are not ground truth; they must not be used as the sole judge.

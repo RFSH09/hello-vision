@@ -48,8 +48,11 @@ class Outbox:
     def put(self, session_id: str, payload: dict[str, object]) -> bool:
         """Queue a payload. Returns False (and keeps the existing entry) if already queued."""
         path = self._path(session_id)
-        if path.exists():
+        try:  # exclusive create: of two concurrent puts exactly one wins
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
             return False
+        os.close(fd)
         self._write(path, OutboxItem(session_id, payload))
         return True
 
@@ -60,7 +63,12 @@ class Outbox:
     def due(self, now: float | None = None) -> list[OutboxItem]:
         """Items whose next attempt time has come, oldest first."""
         t = time.time() if now is None else now
-        items = [OutboxItem(**json.loads(p.read_text("utf-8"))) for p in self.root.glob("*.json")]
+        items: list[OutboxItem] = []
+        for p in self.root.glob("*.json"):
+            try:
+                items.append(OutboxItem(**json.loads(p.read_text("utf-8"))))
+            except (json.JSONDecodeError, TypeError):  # being written right now; next flush
+                continue
         return sorted((i for i in items if i.next_attempt_at <= t), key=lambda i: i.next_attempt_at)
 
     def done(self, session_id: str) -> None:

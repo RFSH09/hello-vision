@@ -25,7 +25,13 @@ from hello_vision.service.evidence import (
 from hello_vision.service.models import SessionResultPayload, to_payload
 from hello_vision.service.outbox import Outbox
 from hello_vision.service.settings import Settings
-from hello_vision.service.signing import SIGNATURE_HEADER, TIMESTAMP_HEADER, sign, verify
+from hello_vision.service.signing import (
+    SIGNATURE_HEADER,
+    TIMESTAMP_HEADER,
+    sign,
+    signed_headers,
+    verify,
+)
 from hello_vision.session.types import CartLine, SessionResult
 from hello_vision.synth.session import write_video
 from sim.pipeline import build_demo_analyzer
@@ -274,19 +280,25 @@ def env(tmp_path: Path):  # type: ignore[no-untyped-def]
     return TestClient(app), settings, received, up, disp
 
 
+def post_session(client, body):  # type: ignore[no-untyped-def]
+    raw = json.dumps(body).encode()
+    headers = {"Content-Type": "application/json", **signed_headers(SECRET, raw)}
+    return client.post("/session", content=raw, headers=headers)
+
+
 BODY = {"fridge_id": "f1", "started_at": T0.isoformat(), "ended_at": T1.isoformat()}
 
 
 def test_app_session_flow_idempotency_and_metrics(env) -> None:  # type: ignore[no-untyped-def]
     client, settings, received, up, disp = env
-    r = client.post("/session", json={**BODY, "session_id": "s-two", "video": "take_two.mp4"})
+    r = post_session(client, {**BODY, "session_id": "s-two", "video": "take_two.mp4"})
     assert r.status_code == 200, r.text
     payload = r.json()["payload"]
     truth = {c.sku: c.qty for c in cached_clip("take_two").truth.cart}
     assert {i["sku"]: i["qty"] for i in payload["items"]} == truth and not payload["needs_review"]
     assert payload["evidence_ref"] == "s-two/clip.mp4" and len(received) == 1
     assert received[0]["session_id"] == "s-two"
-    r2 = client.post("/session", json={**BODY, "session_id": "s-two", "video": "take_two.mp4"})
+    r2 = post_session(client, {**BODY, "session_id": "s-two", "video": "take_two.mp4"})
     assert r2.json()["duplicate"] is True and len(received) == 1  # no double processing/sending
     h = client.get("/health").json()
     assert h["status"] == "ok" and h["outbox_depth"] == 0
@@ -297,7 +309,7 @@ def test_app_session_flow_idempotency_and_metrics(env) -> None:  # type: ignore[
 def test_app_offline_queue_then_flush(env) -> None:  # type: ignore[no-untyped-def]
     client, _, received, up, disp = env
     up["ok"] = False
-    r = client.post("/session", json={**BODY, "session_id": "s-off", "video": "nothing.mp4"})
+    r = post_session(client, {**BODY, "session_id": "s-off", "video": "nothing.mp4"})
     assert (
         r.json()["delivery"]["retry_later"] == 1
         and client.get("/health").json()["outbox_depth"] == 1
@@ -312,38 +324,103 @@ def test_app_offline_queue_then_flush(env) -> None:  # type: ignore[no-untyped-d
 def test_app_rejects_bad_input(env) -> None:  # type: ignore[no-untyped-def]
     client = env[0]
     for video in ("../../etc/passwd", "missing.mp4", "/etc/passwd"):
-        r = client.post("/session", json={**BODY, "session_id": "x", "video": video})
+        r = post_session(client, {**BODY, "session_id": "x", "video": video})
         assert r.status_code == 400
-    assert (
-        client.post("/session", json={**BODY, "session_id": "../x", "video": "a"}).status_code
-        == 422
-    )
+    r = post_session(client, {**BODY, "session_id": "../x", "video": "a"})
+    assert r.status_code == 422
 
 
-def test_review_ui_auth_pages_and_correction(env) -> None:  # type: ignore[no-untyped-def]
+def test_session_endpoint_requires_a_valid_signature(env) -> None:  # type: ignore[no-untyped-def]
+    client, _, received, *_ = env
+    raw = json.dumps({**BODY, "session_id": "sig", "video": "nothing.mp4"}).encode()
+    json_header = {"Content-Type": "application/json"}
+    assert client.post("/session", content=raw, headers=json_header).status_code == 401
+    bad = {**json_header, **signed_headers("wrong-secret", raw)}
+    assert client.post("/session", content=raw, headers=bad).status_code == 401
+    old = {**json_header, **signed_headers(SECRET, raw, now=1000)}  # replayed old request
+    assert client.post("/session", content=raw, headers=old).status_code == 401
+    tampered = {**json_header, **signed_headers(SECRET, raw)}
+    assert client.post("/session", content=raw + b" ", headers=tampered).status_code == 401
+    assert received == []
+
+
+def test_concurrent_requests_for_one_session_run_once(env) -> None:  # type: ignore[no-untyped-def]
+    import threading
+
+    client, _, received, *_ = env
+    results: list[dict] = []  # type: ignore[type-arg]
+
+    def go() -> None:
+        r = post_session(client, {**BODY, "session_id": "race", "video": "nothing.mp4"})
+        results.append(r.json())
+
+    threads = [threading.Thread(target=go) for _ in range(4)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert sum(1 for r in results if not r.get("duplicate")) == 1 and len(results) == 4
+    assert [r["session_id"] for r in received] == ["race"]
+    assert "hello_vision_sessions_total 1\n" in client.get("/metrics").text
+
+
+def test_outbox_put_is_exclusive_under_threads(tmp_path: Path) -> None:
+    import threading
+
+    box = Outbox(tmp_path)
+    wins: list[bool] = []
+    threads = [
+        threading.Thread(target=lambda: wins.append(box.put("s1", {"a": 1}))) for _ in range(8)
+    ]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert wins.count(True) == 1 and len(box) == 1
+
+
+def test_review_login_cookie_and_bearer(env) -> None:  # type: ignore[no-untyped-def]
     client, settings, *_ = env
-    client.post("/session", json={**BODY, "session_id": "s-two", "video": "take_two.mp4"})
+    post_session(client, {**BODY, "session_id": "s-two", "video": "take_two.mp4"})
     assert client.get("/review").status_code == 401
-    assert client.get("/review?token=wrong").status_code == 401
-    ok = client.get("/review?token=tok")
-    assert ok.status_code == 200 and "s-two" in ok.text
-    page = client.get("/review/s-two?token=tok")
-    assert page.status_code == 200 and "Correct the cart" in page.text
-    assert client.get("/review/nope?token=tok").status_code == 404
+    assert client.get("/review?token=tok").status_code == 401  # tokens in URLs are not accepted
+    assert "password" in client.get("/review/login").text
+    assert client.post("/review/login", json={"token": "wrong"}).status_code == 401
+    r = client.post("/review/login", json={"token": "tok"})
+    assert r.status_code == 200
+    cookie = r.headers["set-cookie"]
+    assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "tok;" not in cookie
+    assert client.cookies.get("hv_review") != "tok"  # the cookie is derived, not the raw token
+    ok = client.get("/review")
+    assert ok.status_code == 200 and "s-two" in ok.text and "token=" not in ok.text
+    page = client.get("/review/s-two")
+    assert page.status_code == 200 and "Correct the cart" in page.text and "token" not in page.text
+    assert client.get("/review/nope").status_code == 404
+    assert client.get("/review/s-two/frame/9999.jpg").status_code == 404
+    client.cookies.clear()
+    assert client.get("/review/s-two").status_code == 401
     jpg = client.get("/review/s-two/frame/5.jpg", headers={"Authorization": "Bearer tok"})
     assert jpg.status_code == 200 and jpg.headers["content-type"] == "image/jpeg"
-    assert client.get("/review/s-two/frame/9999.jpg?token=tok").status_code == 404
+    assert client.get("/review", headers={"Authorization": "Bearer nope"}).status_code == 401
+
+
+def test_review_correction_and_queue(env) -> None:  # type: ignore[no-untyped-def]
+    client, settings, *_ = env
+    post_session(client, {**BODY, "session_id": "s-two", "video": "take_two.mp4"})
+    auth = {"Authorization": "Bearer tok"}
+    unauth = client.post("/review/s-two/correction", json={"items": []})
+    assert unauth.status_code == 401
     c = client.post(
-        "/review/s-two/correction?token=tok",
+        "/review/s-two/correction",
         json={"items": [{"sku": "demo_blue_can", "qty": 2}], "note": "n"},
+        headers=auth,
     )
     assert c.status_code == 200 and list_to_label(settings.evidence_root) == ["s-two"]
-    assert "demo_blue_can" in client.get("/review/s-two?token=tok").text
+    assert "demo_blue_can" in client.get("/review/s-two", headers=auth).text
     bad = client.post(
-        "/review/s-two/correction?token=tok", json={"items": [{"sku": "a b", "qty": 1}]}
+        "/review/s-two/correction", json={"items": [{"sku": "a b", "qty": 1}]}, headers=auth
     )
     assert bad.status_code == 422
-    assert client.post("/review/s-two/correction", json={"items": []}).status_code == 401
     assert "hello_vision_corrections_total 1\n" in client.get("/metrics").text
 
 
@@ -355,8 +432,8 @@ def test_review_ui_escapes_html() -> None:
         "items": [{"sku": evil, "qty": 1}],
         "events": [{"action": evil, "sku": evil, "frames": [0, 1], "confidence": 0.1}],
     }  # fmt: skip
-    page = session_page(summary, {"items": [{"sku": evil, "qty": 1}]}, token="</script><b>")  # noqa: S106
-    assert "<script>alert" not in page and "</script><b>" not in page
+    page = session_page(summary, {"items": [{"sku": evil, "qty": 1}]})
+    assert "<script>alert" not in page
     lst = list_page(
         [{"session_id": "s1", "needs_review": False, "items": [{"sku": evil, "qty": 1}]}]
     )
