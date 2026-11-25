@@ -17,8 +17,7 @@ Collected while building M0-M7. Ordered roughly by how much they block a real pi
 ## Recognition logic
 
 6. Thresholds (identification 0.9, min confidence 0.75, move distance, zone split) were tuned on synthetic data only.
-7. The tracker is greedy IoU/distance matching: fragile under heavy occlusion, fast hands, two hands, products crossing.
-   Hand-product association is a simple "near" test.
+7. The tracker is greedy IoU/distance matching. Synthetic stress scenarios now exist: **fast hand and two hands pass** (exact cart, no review); **heavy occlusion** (held product behind the hand) is NOT solved: the pipeline flags it for review instead of guessing. A safety-invariant test asserts that no scenario is ever auto-accepted with a wrong cart. Real occlusion, products crossing and real hand motion are untested. Hand-product association is a simple "near" test.
 8. Shelf diff needs hand-free frames at both ends of the session; busy real sessions may not have them (they then go to review).
 9. Multi-camera "fusion" only checks that per-camera carts agree; real fusion needs the camera geometry.
 10. Zones are a single horizontal split (shelf above, door below); the real geometry depends on camera mounting.
