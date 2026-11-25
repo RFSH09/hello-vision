@@ -1,0 +1,45 @@
+# Known flaws and open work (to fix after the milestones)
+
+Collected while building M0-M7. Ordered roughly by how much they block a real pilot.
+
+## Blockers for any real use
+
+1. **No learned models.** The detector and embedder used in the pipeline are classical stand-ins that only work on the
+   drawn synthetic products. `OnnxDetector` / `OnnxEmbedder` are written but never run against a real model; the training
+   scripts have never been executed; there is no detector trainer yet.
+2. **No real data has been used anywhere.** All accuracy numbers (100% on synthetic scenarios) only show that the plumbing works.
+3. **The colour embedder cannot separate look-alikes** (a gold bar scored 0.93 against a brown bar). Real look-alike SKUs are
+   the main accuracy risk and need the fine-tuned embedding model plus hard-negative evaluation.
+4. **No live pipeline.** Capture, door sensor, lock and the analyzer are not wired into a running daemon; `/session` analyses a
+   recorded video. Door sensor and camera access depend on [HARDWARE_QUESTIONS.md](HARDWARE_QUESTIONS.md).
+5. **Latency.** The baseline detector costs about 42 ms per frame on a fast desktop and analysis starts only after door close.
+   With a real model on a cheap edge box, the 5 s gate is at risk; likely needs streaming analysis during the session,
+   frame subsampling and a fast detector. Latency measurements on the dev PC were noisy (22 s vs 3.7 s for the same session).
+
+## Recognition logic
+
+6. Thresholds (identification 0.9, min confidence 0.75, move distance, zone split) were tuned on synthetic data only.
+7. The tracker is greedy IoU/distance matching: fragile under heavy occlusion, fast hands, two hands, products crossing.
+   Hand-product association is a simple "near" test.
+8. Shelf diff needs hand-free frames at both ends of the session; busy real sessions may not have them (they then go to review).
+9. Multi-camera "fusion" only checks that per-camera carts agree; real fusion needs the camera geometry.
+10. Zones are a single horizontal split (shelf above, door below); the real geometry depends on camera mounting.
+11. Evidence clips use only the first camera.
+
+## Service, privacy, operations
+
+12. Face blur was never run on real faces; no fixed blur regions are configured by default.
+13. The review UI passes its token in the URL query string (ends up in logs/history); JavaScript was never tested in a browser.
+14. Outbox is one file per session with no cross-process locking; `/session` idempotency has a check-then-write race.
+15. Docker image never built (no Docker here); systemd unit never run; the watchdog socket test is skipped on Windows;
+    exports (TensorRT/OpenVINO/RKNN) never run; no board measured.
+16. Transitive dependency licenses (FastAPI stack and others) not audited; `docs/LICENSES.md` candidates are unverified.
+17. OTA: only the local model store exists; how models are delivered and signed is not designed.
+
+## Repo and process
+
+18. Only M0 has a pull request; GitHub had an outage when merging it. M1-M7 branches are local and unpushed, and CI has never run
+    on them (only locally: ruff, mypy, pytest).
+19. No `.gitattributes`: every commit prints LF/CRLF warnings on Windows.
+20. The default `uv` interpreter here is Python 3.14; CI tests 3.11 and 3.12 but they were not run locally.
+21. Weak labels from the current system's carts are not ground truth; they must not be used as the sole judge.

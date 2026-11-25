@@ -11,28 +11,34 @@ instead of being charged as a guess.
 Built by Osonvend. Licensed under Apache-2.0. Real data (footage, customers, sales) is never
 stored in this repository; see [docs/PRIVACY.md](docs/PRIVACY.md).
 
-## Current state (milestone M3)
+## Current state (milestones M0-M7 built; research prototype)
 
-An end-to-end pipeline runs on **synthetic** sessions: capture -> detection -> identification ->
-tracking -> TAKE/RETURN logic -> shelf-diff cross-check -> fusion -> cart with a `needs_review`
-decision. It gets the exact cart on all six synthetic scenarios (take one, take two,
-take-and-return, take nothing, swap, low light).
+Built and tested **on synthetic data only**:
 
-**Important limits.** The detector and embedder used there are classical stand-ins that only work
-on the drawn placeholder products. No learned model has been trained, nothing has been tested on
-real footage, and the synthetic results say nothing about real-world accuracy. Live camera
-capture and multi-camera fusion are untested on hardware.
+- capture adapters, SKU catalog and gallery, packshot import, synthetic scene/session generator
+- detection and identification interfaces; classical stand-in models for the synthetic demo
+- tracking, TAKE/RETURN logic, shelf-diff cross-check, fusion into a cart with a `needs_review` decision
+- evaluation harness (reports, proposed go/no-go gate), shadow-mode comparison, weak labels, CVAT/Label Studio exchange
+- FastAPI service, signed idempotent backend client with an offline queue, face blurring, review UI
+- edge tooling: benchmark, export command plans, model store with rollback, Docker and systemd files
+
+**Not true yet:** no learned model has been trained, nothing was tested on real footage or on any edge board, the live camera and
+door-sensor path is not wired, and the Docker image and systemd unit were never run. The synthetic results (exact cart on every
+scripted scenario) only show that the plumbing works. See [docs/KNOWN_FLAWS.md](docs/KNOWN_FLAWS.md) for the honest list.
 
 | Doc | Purpose |
 | --- | --- |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Pipeline design |
-| [docs/adr/](docs/adr/) | Architecture decision records |
-| [docs/API.md](docs/API.md) | Backend contract (draft) |
-| [docs/LICENSES.md](docs/LICENSES.md) | Model / dataset / dependency licenses |
+| [docs/KNOWN_FLAWS.md](docs/KNOWN_FLAWS.md) | What is missing or weak |
+| [docs/PILOT_PLAN.md](docs/PILOT_PLAN.md), [docs/GO_NO_GO.md](docs/GO_NO_GO.md) | One-fridge shadow pilot and go/no-go checklist |
+| [docs/EVALUATION.md](docs/EVALUATION.md) | Metrics, reports, shadow mode, gate |
+| [docs/API.md](docs/API.md) | Backend contract, signing, offline behaviour |
 | [docs/PRIVACY.md](docs/PRIVACY.md) | Privacy design (needs lawyer review) |
+| [docs/EDGE.md](docs/EDGE.md) | Edge hardware, benchmarks, operations |
+| [docs/DATA_COLLECTION.md](docs/DATA_COLLECTION.md), [docs/DVC.md](docs/DVC.md) | Capture protocol and data versioning |
+| [docs/LICENSES.md](docs/LICENSES.md) | Model, dataset and dependency licenses |
 | [docs/HARDWARE_QUESTIONS.md](docs/HARDWARE_QUESTIONS.md) | Open hardware questions |
-| [docs/DATA_COLLECTION.md](docs/DATA_COLLECTION.md) | Capture protocol (draft) |
-| [docs/EDGE.md](docs/EDGE.md) | Edge hardware plan |
+| [docs/adr/](docs/adr/) | Architecture decision records |
 
 ## Developer quickstart
 
@@ -49,7 +55,8 @@ uv run ruff check . && uv run mypy
 uv sync --group dev
 uv run python -m sim.make_demo --scenario take_two   # writes demo_out/take_two.mp4 + .truth.json
 uv run python -m sim.replay demo_out/take_two.mp4    # prints the cart + review decision
-uv run python -m sim.make_demo --help                # scenarios: take_one, take_two, ...
+uv run python -m sim.make_demo --help                # scenarios: take_one, take_two, swap, ...
+uv run python -m eval.run --synthetic --out demo_out/eval   # evaluation report on synthetic sessions
 ```
 
 `demo_out/take_two.truth.json` is the ground truth; the replay output should match its cart.
@@ -62,6 +69,5 @@ uv run python tools/import_packshots.py --catalog catalog.yaml --src packshots/ 
 
 ## Roadmap
 
-M0 skeleton, M1 catalog + synthetic data + capture + replay, M2 detection + identification,
-M3 tracking + TAKE/RETURN + fusion, M4 evaluation + shadow mode, M5 service + review UI +
-face blur, M6 edge export + benchmarks, M7 single-fridge shadow pilot plan.
+M0-M7 are built (see the `docs/M*_summary.md` files). Next: fix the flaws listed in docs/KNOWN_FLAWS.md, then collect
+real data, train the learned models, and run the one-fridge shadow pilot.
