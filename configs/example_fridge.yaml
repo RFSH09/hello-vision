@@ -1,0 +1,15 @@
+# Example layout. Values are placeholders until the cameras are inspected
+# (docs/HARDWARE_QUESTIONS.md). Copy to a private location for real fridges.
+fridge_id: demo-fridge
+pre_roll_frames: 15
+cameras:
+  - id: cam0
+    kind: file
+    uri: demo_out/take_one.mp4
+    shelf_zone: {x1: 0.0, y1: 0.0, x2: 1.0, y2: 0.7}
+    door_zone: {x1: 0.0, y1: 0.7, x2: 1.0, y2: 1.0}
+storage:
+  gallery_root: demo_out/gallery
+  evidence_root: demo_out/evidence
+  queue_root: demo_out/queue
+  retention_days: 30

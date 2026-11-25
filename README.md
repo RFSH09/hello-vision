@@ -11,9 +11,16 @@ instead of being charged as a guess.
 Built by Osonvend. Licensed under Apache-2.0. Real data (footage, customers, sales) is never
 stored in this repository; see [docs/PRIVACY.md](docs/PRIVACY.md).
 
-## Current state (milestone M0)
+## Current state (milestone M1)
 
-Repository skeleton, CI, pre-commit guards and design docs only. No recognition code yet.
+Working: SKU catalog and gallery, packshot import with background removal, a synthetic data
+generator (random scenes + scripted shopping sessions with ground truth), capture adapters
+(video file, image folder, live camera - the last untested on real hardware), a door/lock
+interface with mocks, and a replay simulator that wraps a video into a session.
+
+**Not working yet:** detection, identification, tracking, TAKE/RETURN logic and the cart.
+The simulator prints `"cart": null` until M2/M3. Everything uses synthetic placeholder
+products (generic names, drawn shapes); no real packshots or footage are in the repo.
 
 | Doc | Purpose |
 | --- | --- |
@@ -35,7 +42,22 @@ uv run pytest
 uv run ruff check . && uv run mypy
 ```
 
-The 5-minute simulator quickstart on a synthetic demo video arrives with M1/M3.
+## 5-minute quickstart (synthetic demo, no real footage)
+
+```
+uv sync --group dev
+uv run python -m sim.make_demo --scenario take_two   # writes demo_out/take_two.mp4 + .truth.json
+uv run python -m sim.replay demo_out/take_two.mp4    # prints the session summary
+uv run python -m sim.make_demo --help                # scenarios: take_one, take_two, ...
+```
+
+`demo_out/take_two.truth.json` is what a working recogniser should output for that video.
+Other tools (all write outside the repo when pointed at private folders):
+
+```
+uv run python tools/gen_synthetic.py --out /private/synth --count 500   # COCO detection set
+uv run python tools/import_packshots.py --catalog catalog.yaml --src packshots/ --gallery /private/gallery
+```
 
 ## Roadmap
 

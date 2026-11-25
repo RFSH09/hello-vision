@@ -83,3 +83,6 @@ Thumbs.db
 
 # Claude Code local state (project settings in .claude/settings.json ARE tracked)
 .claude/settings.local.json
+
+# Generated demo output
+/demo_out/

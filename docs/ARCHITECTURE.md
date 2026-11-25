@@ -23,7 +23,8 @@ One **shopping session** = door_open -> frames from all cameras -> door_close.
 ## Package layout
 
 `hello_vision/{catalog,capture,detect,identify,track,session,privacy,service,review,edge}`,
-plus `training/`, `eval/`, `tools/`, `sim/`, `configs/`, `docker/`.
+plus `hello_vision/synth` (synthetic scenes and scripted sessions with ground truth, added in M1),
+`training/`, `eval/`, `tools/`, `sim/`, `configs/`, `docker/`.
 
 ## Principles
 

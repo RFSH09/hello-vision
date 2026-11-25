@@ -17,3 +17,15 @@ training data) before use.**
 | FAISS | index | MIT | candidate |
 | Pretrained weights / COCO | pretraining | check per file | open |
 | Ultralytics YOLO | - | AGPL-3.0 | **forbidden** |
+
+## Runtime dependencies in use (M1)
+
+| Package | License | Note |
+| --- | --- | --- |
+| numpy | BSD-3-Clause | |
+| Pillow | MIT-CMU (HPND) | |
+| opencv-python-headless | Apache-2.0 | wheels bundle FFmpeg (LGPL-2.1, dynamically linked); confirm this is acceptable for distribution |
+| pydantic | MIT | |
+| PyYAML | MIT | |
+
+Dev tools (ruff, mypy, pytest, pre-commit) are not shipped. Versions are pinned in `uv.lock`.

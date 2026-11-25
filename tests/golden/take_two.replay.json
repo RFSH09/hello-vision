@@ -1,0 +1,12 @@
+{
+  "camera_ids": [
+    "cam0"
+  ],
+  "cart": null,
+  "duration_s": 5.133,
+  "height": 540,
+  "note": "recognition not implemented yet (detection M2, tracking/fusion M3)",
+  "num_frames": 78,
+  "session_id": "replay",
+  "width": 960
+}
