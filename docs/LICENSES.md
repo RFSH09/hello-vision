@@ -29,3 +29,6 @@ training data) before use.**
 | PyYAML | MIT | |
 
 Dev tools (ruff, mypy, pytest, pre-commit) are not shipped. Versions are pinned in `uv.lock`.
+
+| onnxruntime (optional extra) | MIT | |
+| torch, torchvision (optional extra, training only) | BSD-3-Clause | |

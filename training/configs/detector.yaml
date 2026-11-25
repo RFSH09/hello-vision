@@ -1,0 +1,12 @@
+# Detector fine-tuning config (not yet run). Two classes: product, hand.
+# Candidates (all Apache-2.0, verify per docs/LICENSES.md): RT-DETR, D-FINE, RTMDet, YOLOX.
+seed: 0
+model: rtdetr_r18vd          # placeholder name; the training framework is chosen at M2b
+classes: [product, hand]
+input_size: 640
+epochs: 50
+train_coco: /private/synth/annotations.json
+train_images: /private/synth
+val_coco: /private/val/annotations.json
+val_images: /private/val
+out_dir: /private/runs/detector-v0
