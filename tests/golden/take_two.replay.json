@@ -2,11 +2,25 @@
   "camera_ids": [
     "cam0"
   ],
-  "cart": null,
+  "cart": [
+    {
+      "confidence": 0.88,
+      "qty": 1,
+      "sku": "demo_blue_can"
+    },
+    {
+      "confidence": 0.818,
+      "qty": 1,
+      "sku": "demo_orange_bottle"
+    }
+  ],
   "duration_s": 5.133,
   "height": 540,
-  "note": "recognition not implemented yet (detection M2, tracking/fusion M3)",
+  "model_version": "demo-baseline-0",
+  "needs_review": false,
   "num_frames": 78,
+  "reasons": [],
+  "session_confidence": 0.818,
   "session_id": "replay",
   "width": 960
 }

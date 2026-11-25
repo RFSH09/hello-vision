@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from hello_vision.synth.session import SCENARIOS, write_video
+from sim.pipeline import build_demo_analyzer
 from sim.replay import replay_video, summarize
 
 from .conftest import cached_clip
@@ -36,5 +37,6 @@ def test_truth_golden(scenario: str) -> None:
 def test_replay_summary_golden(tmp_path: Path) -> None:
     clip = cached_clip("take_two")
     write_video(clip.frames, tmp_path / "v.mp4")
-    summary = summarize(replay_video(tmp_path / "v.mp4"))
+    session = replay_video(tmp_path / "v.mp4")
+    summary = summarize(session, build_demo_analyzer().analyze(session))
     _check("take_two.replay.json", summary.model_dump())

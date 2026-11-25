@@ -11,16 +11,17 @@ instead of being charged as a guess.
 Built by Osonvend. Licensed under Apache-2.0. Real data (footage, customers, sales) is never
 stored in this repository; see [docs/PRIVACY.md](docs/PRIVACY.md).
 
-## Current state (milestone M1)
+## Current state (milestone M3)
 
-Working: SKU catalog and gallery, packshot import with background removal, a synthetic data
-generator (random scenes + scripted shopping sessions with ground truth), capture adapters
-(video file, image folder, live camera - the last untested on real hardware), a door/lock
-interface with mocks, and a replay simulator that wraps a video into a session.
+An end-to-end pipeline runs on **synthetic** sessions: capture -> detection -> identification ->
+tracking -> TAKE/RETURN logic -> shelf-diff cross-check -> fusion -> cart with a `needs_review`
+decision. It gets the exact cart on all six synthetic scenarios (take one, take two,
+take-and-return, take nothing, swap, low light).
 
-**Not working yet:** detection, identification, tracking, TAKE/RETURN logic and the cart.
-The simulator prints `"cart": null` until M2/M3. Everything uses synthetic placeholder
-products (generic names, drawn shapes); no real packshots or footage are in the repo.
+**Important limits.** The detector and embedder used there are classical stand-ins that only work
+on the drawn placeholder products. No learned model has been trained, nothing has been tested on
+real footage, and the synthetic results say nothing about real-world accuracy. Live camera
+capture and multi-camera fusion are untested on hardware.
 
 | Doc | Purpose |
 | --- | --- |
@@ -47,11 +48,11 @@ uv run ruff check . && uv run mypy
 ```
 uv sync --group dev
 uv run python -m sim.make_demo --scenario take_two   # writes demo_out/take_two.mp4 + .truth.json
-uv run python -m sim.replay demo_out/take_two.mp4    # prints the session summary
+uv run python -m sim.replay demo_out/take_two.mp4    # prints the cart + review decision
 uv run python -m sim.make_demo --help                # scenarios: take_one, take_two, ...
 ```
 
-`demo_out/take_two.truth.json` is what a working recogniser should output for that video.
+`demo_out/take_two.truth.json` is the ground truth; the replay output should match its cart.
 Other tools (all write outside the repo when pointed at private folders):
 
 ```
