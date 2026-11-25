@@ -61,7 +61,7 @@ convention = "google"
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["hello_vision", "sim", "tools/hooks", "tools/import_packshots.py", "tools/gen_synthetic.py"]
+files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/import_packshots.py", "tools/gen_synthetic.py"]
 
 [[tool.mypy.overrides]]
 module = ["onnxruntime", "torch", "torchvision"]
