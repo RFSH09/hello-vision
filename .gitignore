@@ -1,0 +1,85 @@
+# ---- Real data NEVER goes into this repo (see docs/PRIVACY.md) ----
+/data/
+/datasets/
+/private/
+/secrets/
+/evidence/
+/runs/
+/mlruns/
+/outputs/
+/.dvc/cache/
+/.dvc/tmp/
+
+# Media (real footage, frames, packshots). Synthetic demo media is generated at runtime.
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.m4v
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tif
+*.tiff
+*.webp
+*.gif
+*.heic
+
+# Model weights and exported engines (published via releases / private storage, not git)
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.engine
+*.trt
+*.rknn
+*.xml.bin
+*.npz
+*.npy
+*.faiss
+
+# Secrets and config with credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets.*
+credentials*.json
+*.token
+
+# Databases / queues / logs produced at runtime
+*.sqlite
+*.sqlite3
+*.db
+*.log
+queue/
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local state (project settings in .claude/settings.json ARE tracked)
+.claude/settings.local.json

@@ -1,0 +1,47 @@
+# Install once with:  uv run pre-commit install
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      # Blocks media, model weights, .env/keys, anything under data/, and oversized files.
+      - id: repo-hygiene
+        name: block media / data / secrets / large files
+        entry: python tools/hooks/check_files.py --max-kb 512
+        language: system
+        pass_filenames: true
+
+      # Rejects AI / tool attribution trailers in commit messages.
+      - id: no-attribution
+        name: no Co-Authored-By / Generated-with trailers
+        entry: python tools/hooks/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
+
+      # Before every push: exactly one author identity, no attribution trailers in history.
+      - id: single-author
+        name: history has a single author and no trailers
+        entry: python tools/hooks/check_authors.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        pass_filenames: false
+        types: [python]
