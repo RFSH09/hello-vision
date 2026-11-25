@@ -16,11 +16,14 @@ classifiers = [
 # Runtime dependencies are added milestone by milestone, permissive licenses only
 # (see docs/LICENSES.md). Nothing is needed for M0.
 dependencies = [
+    "fastapi>=0.165.0",
+    "httpx>=0.28.1",
     "numpy>=2.4.6",
     "opencv-python-headless>=5.1.0.95",
     "pillow>=13.0.0",
     "pydantic>=2.14.4",
     "pyyaml>=6.0.4",
+    "uvicorn>=0.54.0",
 ]
 
 [project.optional-dependencies]
@@ -56,12 +59,13 @@ ignore = ["D203", "D213", "D107"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D", "ANN", "S101", "E501"]
+"tests/**" = ["D", "ANN", "S101", "S105", "E501", "RUF059"]
+"hello_vision/review/ui.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/import_packshots.py", "tools/gen_synthetic.py"]
+files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/import_packshots.py", "tools/gen_synthetic.py", "tools/fetch_face_model.py"]
 
 [[tool.mypy.overrides]]
 module = ["onnxruntime", "torch", "torchvision"]
