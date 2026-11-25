@@ -24,7 +24,7 @@ from eval.report import to_html, to_markdown
 from hello_vision.capture.types import Frame, Session
 from hello_vision.session.analyzer import SessionAnalyzer
 from hello_vision.session.types import SessionResult
-from hello_vision.synth.session import SCENARIOS, SessionTruth, render_session
+from hello_vision.synth.session import SCENARIOS, render_session
 
 
 def _actions(result: SessionResult) -> list[str]:
@@ -81,22 +81,33 @@ def synthetic_evals(
 
 
 def folder_evals(analyzer: SessionAnalyzer, folder: Path) -> list[SessionEval]:
-    """Evaluate ``<name>.mp4`` + ``<name>.truth.json`` pairs in ``folder``."""
+    """Evaluate every ``<name>.truth.json`` in ``folder``.
+
+    A truth file needs ``cart`` (list of ``{sku, qty}`` or a ``{sku: qty}`` map) and may have
+    ``session_id``, ``actions`` (``{kind, sku}``) and ``video`` (path; default: the sibling
+    ``<name>.mp4``). Weak labels from ``datatools.weak_labels`` use the same format.
+
+    Raises:
+        FileNotFoundError: A truth file points at a video that does not exist.
+    """
     from sim.replay import replay_video
 
     out: list[SessionEval] = []
-    for video in sorted(folder.glob("*.mp4")):
-        truth_path = video.with_suffix(".truth.json")
-        if not truth_path.exists():
-            continue
-        truth = SessionTruth.model_validate_json(truth_path.read_text(encoding="utf-8"))
-        session = replay_video(video, session_id=truth.session_id)
+    for truth_path in sorted(folder.glob("*.truth.json")):
+        raw = json.loads(truth_path.read_text(encoding="utf-8"))
+        name = truth_path.name.removesuffix(".truth.json")
+        video = Path(raw["video"]) if raw.get("video") else truth_path.with_name(name + ".mp4")
+        if not video.is_file():
+            raise FileNotFoundError(f"video for {truth_path.name} not found: {video}")
+        cart = raw["cart"]
+        truth_cart = {c["sku"]: c["qty"] for c in cart} if isinstance(cart, list) else dict(cart)
+        session = replay_video(video, session_id=str(raw.get("session_id", name)))
         out.append(
             evaluate_session(
                 analyzer,
                 session,
-                {c.sku: c.qty for c in truth.cart},
-                [f"{a.kind}:{a.sku}" for a in truth.actions],
+                truth_cart,
+                [f"{a['kind']}:{a['sku']}" for a in raw.get("actions", [])],
                 clip=str(video),
             )
         )
