@@ -4,12 +4,12 @@
   ],
   "cart": [
     {
-      "confidence": 0.88,
+      "confidence": 0.894,
       "qty": 1,
       "sku": "demo_blue_can"
     },
     {
-      "confidence": 0.818,
+      "confidence": 0.927,
       "qty": 1,
       "sku": "demo_orange_bottle"
     }
@@ -20,7 +20,7 @@
   "needs_review": false,
   "num_frames": 78,
   "reasons": [],
-  "session_confidence": 0.818,
+  "session_confidence": 0.894,
   "session_id": "replay",
   "width": 960
 }

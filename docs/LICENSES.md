@@ -39,4 +39,16 @@ Dev tools (ruff, mypy, pytest, pre-commit) are not shipped. Versions are pinned 
 | uvicorn | BSD-3-Clause | |
 | YuNet face model (OpenCV Zoo) | MIT | downloaded at deploy time by tools/fetch_face_model.py, not in the repo |
 
-Transitive dependencies of the web stack were pulled in by `uv add` and have NOT been individually audited yet; run a license scan (for example `pip-licenses`) before any release.
+## Dependency license audit (2026-11-25)
+
+Scanned the full installed tree (runtime and dev, 44 packages) with
+`uv run --with pip-licenses pip-licenses --format=csv --with-urls --order=license`. Re-run it before every release.
+
+- **Permissive (Apache-2.0, MIT, BSD, MIT-CMU/HPND, PSF, 0BSD, Zlib):** everything except the two packages below. This includes
+  numpy, Pillow, OpenCV, pydantic, PyYAML, FastAPI, Starlette, uvicorn, httpx/httpcore/h11, anyio, opentelemetry-api (pulled in by the web stack).
+- **MPL-2.0 (weak, file-level copyleft): `certifi` (runtime, required by httpx) and `pathspec` (development tooling only).**
+  MPL-2.0 only requires that modifications to those files be shared; using them unmodified as separate packages is normally fine,
+  but it does not meet the project rule "Apache/MIT/BSD only". **Decision needed from the owner:** accept MPL-2.0 for `certifi`, or
+  replace the HTTP client. (`pathspec` is not shipped.)
+- **LGPL (bundled, not a Python dependency):** the OpenCV wheel ships FFmpeg under LGPL-2.1, dynamically linked. Still to confirm.
+- **Not scanned:** optional extras (`onnxruntime`, `torch`), model weights and datasets (each needs its own check when adopted).

@@ -50,10 +50,11 @@ def verify(secret: str, body: bytes, timestamp: str, signature: str, max_skew_s:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /session` | analyse a recorded session video under the sessions root; idempotent by `session_id` |
+| `POST /session` | analyse a recorded session video under the sessions root; idempotent by `session_id`; **requires the same HMAC signature headers as the backend contract** (stale timestamps rejected); requests for one session id are serialised |
 | `GET /health` | status, model version, queue depth |
 | `GET /metrics` | Prometheus text format |
-| `GET /review`, `/review/{id}` | review UI (token protected when `VISION_REVIEW_TOKEN` is set) |
+| `GET /review/login`, `POST /review/login` | exchange the review token for an HttpOnly, SameSite=Strict cookie (derived from the token, never the token itself); `Authorization: Bearer` also works; tokens in URLs are NOT accepted |
+| `GET /review`, `/review/{id}` | review UI (needs login when `VISION_REVIEW_TOKEN` is set) |
 | `POST /review/{id}/correction` | store a human-corrected cart and queue the session for labelling |
 
 Settings are environment variables, see `.env.example`.

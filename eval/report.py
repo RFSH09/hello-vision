@@ -35,6 +35,7 @@ def to_markdown(
             "latency p50 / p95 (door close -> result)",
             f"{m.latency_p50_s:.2f}s / {m.latency_p95_s:.2f}s",
         ),
+        ("worst real-time factor (processing / session time)", f"{m.realtime_factor_max:.2f}"),
     ]
     lines += [f"| {a} | {b} |" for a, b in rows]
     if gate:

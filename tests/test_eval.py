@@ -71,6 +71,7 @@ def test_gate_logic() -> None:
     rows = check_gate(good, days_covered=3, on_target_device=False)
     assert [r.name for r in rows if not r.passed] == [
         "latency p95 (door close -> result)",
+        "keeps up with cameras (processing / session time)",
         "shadow duration",
     ]
     bad = compute([ev("a", {"a": 1}, {"b": 1})])

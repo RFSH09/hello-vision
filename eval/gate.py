@@ -18,6 +18,7 @@ class GateThresholds:
     max_false_charge_rate: float = 0.002
     max_review_rate: float = 0.03
     max_latency_s: float = 5.0
+    max_realtime_factor: float = 1.0
     min_days: float = 14.0
 
 
@@ -60,6 +61,11 @@ def check_gate(
         GateRow("latency p95 (door close -> result)", f"{m.latency_p95_s:.2f}s"
                 + ("" if on_target_device else " (NOT on target device)"),
                 f"< {t.max_latency_s}s", on_target_device and m.latency_p95_s < t.max_latency_s),
+        GateRow("keeps up with cameras (processing / session time)",
+                f"{m.realtime_factor_max:.2f}"
+                + ("" if on_target_device else " (NOT on target device)"),
+                f"< {t.max_realtime_factor}",
+                on_target_device and m.realtime_factor_max < t.max_realtime_factor),
         GateRow("shadow duration", f"{days_covered:.1f} days",
                 f">= {t.min_days:.0f} days", days_covered >= t.min_days),
     ]  # fmt: skip
