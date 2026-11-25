@@ -32,3 +32,11 @@ Dev tools (ruff, mypy, pytest, pre-commit) are not shipped. Versions are pinned 
 
 | onnxruntime (optional extra) | MIT | |
 | torch, torchvision (optional extra, training only) | BSD-3-Clause | |
+
+| fastapi | MIT | |
+| starlette | BSD-3-Clause | transitive of fastapi |
+| httpx | BSD-3-Clause | |
+| uvicorn | BSD-3-Clause | |
+| YuNet face model (OpenCV Zoo) | MIT | downloaded at deploy time by tools/fetch_face_model.py, not in the repo |
+
+Transitive dependencies of the web stack were pulled in by `uv add` and have NOT been individually audited yet; run a license scan (for example `pip-licenses`) before any release.
