@@ -12,9 +12,7 @@ Collected while building M0-M7. Ordered roughly by how much they block a real pi
    the main accuracy risk and need the fine-tuned embedding model plus hard-negative evaluation.
 4. **No live pipeline.** Capture, door sensor, lock and the analyzer are not wired into a running daemon; `/session` analyses a
    recorded video. Door sensor and camera access depend on [HARDWARE_QUESTIONS.md](HARDWARE_QUESTIONS.md).
-5. **Latency.** The baseline detector costs about 42 ms per frame on a fast desktop and analysis starts only after door close.
-   With a real model on a cheap edge box, the 5 s gate is at risk; likely needs streaming analysis during the session,
-   frame subsampling and a fast detector. Latency measurements on the dev PC were noisy (22 s vs 3.7 s for the same session).
+5. **Latency.** PARTLY FIXED: analysis is now streaming (frames are processed as they arrive, only the final decision runs after door close, about 0 s) and tracks are re-identified every 3rd frame. The new risk is keeping up in real time: the baseline uses 0.62x of the session time on a fast desktop, and a real model on a cheap board may exceed 1.0 (the gate has a row for it). Needs frame subsampling / a fast detector and measurement on the target board.
 
 ## Recognition logic
 
@@ -33,7 +31,7 @@ Collected while building M0-M7. Ordered roughly by how much they block a real pi
 14. ~~Outbox/`/session` races~~ FIXED within one process (exclusive file create, per-session lock, tested with threads). Still open: several service processes sharing one folder are not coordinated.
 15. Docker image never built (no Docker here); systemd unit never run; the watchdog socket test is skipped on Windows;
     exports (TensorRT/OpenVINO/RKNN) never run; no board measured.
-16. Transitive dependency licenses (FastAPI stack and others) not audited; `docs/LICENSES.md` candidates are unverified.
+16. ~~Transitive licenses unaudited~~ DONE (see LICENSES.md): all permissive except `certifi` (MPL-2.0, runtime) - owner decision needed. Model/dataset licenses are still unverified.
 17. OTA: only the local model store exists; how models are delivered and signed is not designed.
 
 ## Repo and process
