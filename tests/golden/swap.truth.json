@@ -1,0 +1,53 @@
+{
+  "actions": [
+    {
+      "contact_frame": 21,
+      "end_frame": 35,
+      "kind": "take",
+      "sku": "demo_orange_bottle",
+      "slot": 1,
+      "start_frame": 8
+    },
+    {
+      "contact_frame": 55,
+      "end_frame": 69,
+      "kind": "return",
+      "sku": "demo_orange_bottle",
+      "slot": 1,
+      "start_frame": 42
+    },
+    {
+      "contact_frame": 89,
+      "end_frame": 103,
+      "kind": "take",
+      "sku": "demo_blue_can",
+      "slot": 4,
+      "start_frame": 76
+    }
+  ],
+  "cart": [
+    {
+      "qty": 1,
+      "sku": "demo_blue_can"
+    }
+  ],
+  "door_close_frame": 111,
+  "door_open_frame": 0,
+  "fps": 15,
+  "fridge_id": "demo-fridge",
+  "height": 540,
+  "num_frames": 112,
+  "scenario": "swap",
+  "seed": 0,
+  "session_id": "swap-0",
+  "shelf_zone_y_max": 0.7,
+  "slot_skus": {
+    "0": "demo_cola_bottle",
+    "1": "demo_orange_bottle",
+    "2": "demo_tea_bottle",
+    "3": "demo_black_can",
+    "4": "demo_blue_can",
+    "5": "demo_maroon_can"
+  },
+  "width": 960
+}

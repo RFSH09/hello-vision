@@ -1,8 +1,8 @@
 """Replay a video as one shopping session.
 
-M1 status: the capture side only. The video is wrapped in door_open/door_close events and
-turned into a :class:`Session`; the cart stays ``null`` until detection and identification
-(M2) and tracking/fusion (M3) exist.
+The video is wrapped in door_open/door_close events, turned into a :class:`Session` and run
+through the demo pipeline (synthetic baseline detector/embedder, see ``sim.pipeline``), which
+prints the cart and the review decision. It only recognises the synthetic placeholder products.
 
 Usage: ``uv run python -m sim.replay <video>``
 """
@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from hello_vision.capture.recorder import SessionBuilder
 from hello_vision.capture.sources import VideoFileSource
 from hello_vision.capture.types import DoorEvent, DoorEventType, Session
+from hello_vision.session.types import SessionResult
+from sim.pipeline import build_demo_analyzer
 
 
 class SessionSummary(BaseModel):
@@ -30,8 +32,11 @@ class SessionSummary(BaseModel):
     duration_s: float
     width: int
     height: int
-    cart: list[dict[str, object]] | None
-    note: str
+    cart: list[dict[str, object]]
+    session_confidence: float
+    needs_review: bool
+    reasons: list[str]
+    model_version: str
 
 
 def replay_video(path: Path, session_id: str = "replay", camera_id: str = "cam0") -> Session:
@@ -55,8 +60,8 @@ def replay_video(path: Path, session_id: str = "replay", camera_id: str = "cam0"
     return session
 
 
-def summarize(session: Session) -> SessionSummary:
-    """Build the printable summary (cart is ``None`` until recognition exists)."""
+def summarize(session: Session, result: SessionResult) -> SessionSummary:
+    """Build the printable summary of a replayed session and its analysis."""
     h, w = session.frames[0].image.shape[:2]
     return SessionSummary(
         session_id=session.session_id,
@@ -65,8 +70,13 @@ def summarize(session: Session) -> SessionSummary:
         duration_s=round(session.duration, 3),
         width=w,
         height=h,
-        cart=None,
-        note="recognition not implemented yet (detection M2, tracking/fusion M3)",
+        cart=[
+            {"sku": c.sku, "qty": c.qty, "confidence": round(c.confidence, 3)} for c in result.items
+        ],
+        session_confidence=round(result.session_confidence, 3),
+        needs_review=result.needs_review,
+        reasons=result.reasons,
+        model_version=result.model_version,
     )
 
 
@@ -76,7 +86,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("video", type=Path)
     parser.add_argument("--session-id", default="replay")
     args = parser.parse_args(argv)
-    summary = summarize(replay_video(args.video, args.session_id))
+    session = replay_video(args.video, args.session_id)
+    summary = summarize(session, build_demo_analyzer().analyze(session))
     print(json.dumps(summary.model_dump(), indent=2))
     return 0
 

@@ -56,7 +56,7 @@ ignore = ["D203", "D213", "D107"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["D", "ANN", "S101"]
+"tests/**" = ["D", "ANN", "S101", "E501"]
 
 [tool.mypy]
 python_version = "3.11"

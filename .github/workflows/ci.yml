@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --group dev
-      - run: uv run pytest
+      - run: uv run pytest --cov=hello_vision.session --cov=hello_vision.identify --cov-fail-under=80
 
   hygiene:
     runs-on: ubuntu-latest

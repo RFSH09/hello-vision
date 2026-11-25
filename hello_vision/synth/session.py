@@ -33,6 +33,7 @@ SCENARIOS: dict[str, tuple[list[tuple[str, int]], float, float]] = {
     "take_two": ([("take", 1), ("take", 4)], 1.0, 1.0),
     "take_and_return": ([("take", 3), ("return", 3)], 1.0, 1.0),
     "take_nothing": ([], 1.0, 1.0),
+    "swap": ([("take", 1), ("return", 1), ("take", 4)], 1.0, 1.0),
     "take_one_low_light": ([("take", 0)], 0.45, 1.3),
 }
 
@@ -177,6 +178,11 @@ def render_session(
                 )
                 if bb:
                     boxes.append(Box("product", slot_sku[slot], *bb))
+        # a grasped product is held in front of the fingers, so it is drawn after the hand
+        if hand_at is not None:
+            hb = draw_hand(img, hand_at, rng, 1.0)
+            if hb:
+                boxes.append(Box("hand", None, *hb))
         if carried is not None:
             slot, pos = carried
             bb = place_sprite(
@@ -184,10 +190,6 @@ def render_session(
             )
             if bb:
                 boxes.append(Box("product", slot_sku[slot], *bb))
-        if hand_at is not None:
-            hb = draw_hand(img, hand_at, rng, 1.0)
-            if hb:
-                boxes.append(Box("hand", None, *hb))
 
         img = apply_lighting(img, rng, gain, gamma, noise_sigma=2.0)
         frames.append(np.asarray(img, dtype=np.uint8))
