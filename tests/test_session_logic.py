@@ -51,18 +51,18 @@ HAND_DOWN = line(300, 300, 300, 600)
 def test_tracker_follows_and_splits_objects() -> None:
     tr = Tracker("product")
     for f in range(6):
-        tr.update(f, [(box(100 + 5 * f, 100), None), (box(400, 300 + 5 * f), None)])
+        tr.update(f, [box(100 + 5 * f, 100), box(400, 300 + 5 * f)])
     assert len(tr.tracks) == 2 and all(t.hits == 6 for t in tr.tracks)
-    tr.update(6, [(box(500, 50), None)])  # a far-away new object
+    tr.update(6, [box(500, 50)])  # a far-away new object
     assert len(tr.tracks) == 3
 
 
 def test_tracker_closes_lost_tracks_and_ignores_other_labels() -> None:
     tr = Tracker("product", max_missed=1)
-    tr.update(0, [(box(100, 100), None), (box(300, 300, label="hand"), None)])
+    tr.update(0, [box(100, 100), box(300, 300, label="hand")])
     for f in (1, 2, 3):
         tr.update(f, [])
-    tr.update(4, [(box(100, 100), None)])  # same place but the old track is closed
+    tr.update(4, [box(100, 100)])  # same place but the old track is closed
     assert len(tr.tracks) == 2 and tr.tracks[0].hits == 1
 
 

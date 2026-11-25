@@ -38,16 +38,30 @@ def evaluate_session(
     truth_actions: list[str],
     clip: str | None = None,
 ) -> SessionEval:
-    """Analyse one session (timing the call) and compare with the truth."""
-    start = time.perf_counter()
-    result = analyzer.analyze(session)
-    latency = time.perf_counter() - start
+    """Analyse one session as it would run live, timing the two phases, and compare with truth.
+
+    ``processing_s`` is the time spent on the frames while the door is open and ``latency_s``
+    is the time of the final decision after the last frame (door close -> result).
+    ``realtime_factor`` = processing time / session duration; it must stay below 1 or the
+    module falls behind the cameras.
+    """
+    live = analyzer.begin(session.session_id)
+    t0 = time.perf_counter()
+    for frame in session.frames:
+        live.push(frame)
+    processing = time.perf_counter() - t0
+    t1 = time.perf_counter()
+    result = live.finish()
+    latency = time.perf_counter() - t1
+    duration = max(session.duration, 1e-9)
     return SessionEval(
         session_id=session.session_id,
         truth=truth_cart,
         pred=result.cart_dict(),
         needs_review=result.needs_review,
         latency_s=latency,
+        processing_s=processing,
+        realtime_factor=processing / duration,
         truth_actions=truth_actions,
         pred_actions=_actions(result),
         clip=clip,

@@ -17,7 +17,9 @@ class SessionEval(BaseModel):
         truth: True cart ``{sku: qty}``.
         pred: Predicted cart ``{sku: qty}`` (the proposal even if ``needs_review``).
         needs_review: Whether the module flagged the session for a human.
-        latency_s: Seconds from door close to result.
+        latency_s: Seconds from door close to result (the final decision only).
+        processing_s: Seconds spent processing frames while the door was open.
+        realtime_factor: processing_s / session duration (must be < 1 to keep up).
         truth_actions: True actions as ``"take:<sku>"`` / ``"return:<sku>"`` (may be empty).
         pred_actions: Predicted actions in the same format.
         clip: Reference to the evidence clip or source video, if any.
@@ -28,6 +30,8 @@ class SessionEval(BaseModel):
     pred: dict[str, int]
     needs_review: bool = False
     latency_s: float = 0.0
+    processing_s: float = 0.0
+    realtime_factor: float = 0.0
     truth_actions: list[str] = []
     pred_actions: list[str] = []
     clip: str | None = None
@@ -59,6 +63,7 @@ class Metrics:
     take_return_errors: int = 0
     latency_p50_s: float = 0.0
     latency_p95_s: float = 0.0
+    realtime_factor_max: float = 0.0
     confusion: dict[str, Counter[str]] = field(default_factory=dict)  # true sku -> predicted sku
     failures: list[str] = field(default_factory=list)  # session ids that are not exact
 
@@ -108,4 +113,5 @@ def compute(evals: Sequence[SessionEval]) -> Metrics:
             m.take_return_errors += sum(diff.values()) + sum(diff2.values())
     lat = [e.latency_s for e in evals]
     m.latency_p50_s, m.latency_p95_s = _percentile(lat, 0.5), _percentile(lat, 0.95)
+    m.realtime_factor_max = max(e.realtime_factor for e in evals)
     return m
