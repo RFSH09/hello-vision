@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+.env
+.env.*
+!.env.example
+data
+demo_out
+tests
+docs
+training
+**/__pycache__
+*.mp4
+*.onnx

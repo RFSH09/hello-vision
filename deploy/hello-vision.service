@@ -1,0 +1,33 @@
+# systemd unit for the edge box. NOT TESTED ON A DEVICE YET.
+# Install: copy to /etc/systemd/system/, create /etc/hello-vision.env from .env.example (chmod 600),
+# deploy the code and a virtualenv to /opt/hello-vision, then: systemctl enable --now hello-vision
+[Unit]
+Description=hello-vision product recognition service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=vision
+Group=vision
+WorkingDirectory=/opt/hello-vision
+EnvironmentFile=/etc/hello-vision.env
+ExecStart=/opt/hello-vision/.venv/bin/python -m hello_vision.service.main
+Restart=always
+RestartSec=3
+# Restart the service if it stops answering the watchdog
+WatchdogSec=60
+TimeoutStartSec=120
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/hello-vision
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
