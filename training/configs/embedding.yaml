@@ -1,0 +1,11 @@
+# Embedding fine-tuning config (not yet run). Paths point to PRIVATE storage.
+seed: 0
+backbone: dinov2_vits14      # DINOv2-small; confirm weight licence in docs/LICENSES.md first
+input_size: 224
+batch_size: 64
+epochs: 20
+lr: 0.00002
+arcface_scale: 30.0
+arcface_margin: 0.3
+crops_dir: /private/crops
+out_dir: /private/runs/embedding-v0
