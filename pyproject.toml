@@ -29,6 +29,14 @@ dependencies = [
 [project.optional-dependencies]
 onnx = ["onnxruntime>=1.18"]
 train = ["torch>=2.3", "torchvision>=0.18"]
+# zero-shot detection / identification (large download; weights go to models/, never to git)
+vision = ["torch>=2.7", "torchvision>=0.22", "transformers>=4.50", "scipy>=1.13"]
+app = ["gradio>=5"]
+
+[project.scripts]
+hv-demo = "sim.run_video:main"
+hv-batch = "sim.run_video:batch"
+hv-app = "hello_vision.review.demo_app:main"
 
 [dependency-groups]
 dev = [
@@ -39,6 +47,15 @@ dev = [
     "ruff>=0.5",
     "types-pyyaml>=6.0.12.20261122",
 ]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+torchvision = [{ index = "pytorch-cu126", marker = "sys_platform == 'win32'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -61,14 +78,15 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["D", "ANN", "S101", "S105", "E501", "RUF059"]
 "hello_vision/review/ui.py" = ["E501"]
+"hello_vision/datatools/label_sheet.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/import_packshots.py", "tools/gen_synthetic.py", "tools/fetch_face_model.py", "tools/labeling_convert.py", "tools/weak_labels.py"]
+files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/make_label_sheet.py", "tools/apply_labels.py", "tools/fetch_videos.py", "tools/autolabel.py", "tools/check_licenses.py", "tools/import_packshots.py", "tools/gen_synthetic.py", "tools/fetch_face_model.py", "tools/labeling_convert.py", "tools/weak_labels.py"]
 
 [[tool.mypy.overrides]]
-module = ["onnxruntime", "torch", "torchvision"]
+module = ["onnxruntime", "torch", "torch.*", "torchvision", "torchvision.*", "transformers", "scipy", "scipy.*", "gradio"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

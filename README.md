@@ -40,6 +40,25 @@ scripted scenario) only show that the plumbing works. See [docs/KNOWN_FLAWS.md](
 | [docs/HARDWARE_QUESTIONS.md](docs/HARDWARE_QUESTIONS.md) | Open hardware questions |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
+## Zero-shot demo on real videos (optional, needs a GPU for reasonable speed)
+
+Private inputs stay in git-ignored folders: product photos in `data/gallery/<sku>.png`, videos in
+`data/videos/`, optional `data/orders.csv` (`video_id,sku,qty`). Model weights download to `models/`.
+
+```
+uv sync --group dev --extra vision
+uv run --extra vision python tools/fetch_face_model.py --out models
+uv run --extra vision hv-demo --video data/videos/X.mp4 --out out/X.mp4
+uv run --extra vision hv-batch --videos data/videos --orders data/orders.csv --out out
+uv run --extra vision --extra app hv-app                      # local demo UI on http://127.0.0.1:7860
+uv run --extra vision python tools/make_label_sheet.py         # out/labeling/index.html: name real crops
+uv run --extra vision python tools/apply_labels.py --labels data/labels.json   # score on unseen orders
+uv run --extra vision python tools/autolabel.py --count 500    # CVAT / Label Studio pre-annotations
+```
+
+This is a first, untrained baseline: it is **not** accurate enough to produce a cart. Face blurring in the
+outputs is best-effort, so treat `out/` as private.
+
 ## Developer quickstart
 
 ```
