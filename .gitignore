@@ -86,3 +86,9 @@ Thumbs.db
 
 # Generated demo output
 /demo_out/
+
+# Private data, outputs and model weights: never committed
+/data
+/data/
+/out/
+/models/

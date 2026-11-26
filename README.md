@@ -40,6 +40,21 @@ scripted scenario) only show that the plumbing works. See [docs/KNOWN_FLAWS.md](
 | [docs/HARDWARE_QUESTIONS.md](docs/HARDWARE_QUESTIONS.md) | Open hardware questions |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 
+## Zero-shot demo on real videos (optional, needs a GPU for reasonable speed)
+
+Private inputs stay in git-ignored folders: product photos in `data/gallery/<sku>.png`, videos in
+`data/videos/`, optional `data/orders.csv` (`video_id,sku,qty`). Model weights download to `models/`.
+
+```
+uv sync --group dev --extra vision
+uv run --extra vision python tools/fetch_face_model.py --out models
+uv run --extra vision hv-demo --video data/videos/X.mp4 --out out/X.mp4
+uv run --extra vision hv-batch --videos data/videos --orders data/orders.csv --out out
+```
+
+This is a first, untrained baseline: it is **not** accurate enough to produce a cart. Face blurring in the
+outputs is best-effort, so treat `out/` as private.
+
 ## Developer quickstart
 
 ```

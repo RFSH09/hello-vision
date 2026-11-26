@@ -56,6 +56,10 @@ class GalleryIndex:
         """Number of reference vectors."""
         return len(self._vecs)
 
+    def export(self) -> tuple[list[str], list[Vector]]:
+        """Return the SKU id of every reference vector and the vectors (for caching)."""
+        return list(self._skus), list(self._vecs)
+
     @property
     def skus(self) -> list[str]:
         """Distinct SKU ids in the index, sorted."""

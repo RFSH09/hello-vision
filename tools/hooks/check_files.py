@@ -26,7 +26,9 @@ BLOCKED_SUFFIXES = frozenset(
         ".sqlite", ".sqlite3", ".db",
     }
 )  # fmt: skip
-BLOCKED_TOP_DIRS = frozenset({"data", "datasets", "private", "secrets", "evidence"})
+BLOCKED_TOP_DIRS = frozenset(
+    {"data", "datasets", "private", "secrets", "evidence", "out", "models"}
+)
 ENV_ALLOWED = frozenset({".env.example"})
 
 
