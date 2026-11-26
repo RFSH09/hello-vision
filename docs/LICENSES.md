@@ -1,6 +1,6 @@
 # Licenses of models, datasets and dependencies
 
-Our code: Apache-2.0. Rule: Apache/MIT/BSD only; no AGPL/GPL.
+Our code: Apache-2.0. Policy below (enforced by `tools/check_licenses.py` in CI).
 
 **Nothing below is adopted yet. "Candidate" entries must be re-verified (code, weights and
 training data) before use.**
@@ -39,16 +39,29 @@ Dev tools (ruff, mypy, pytest, pre-commit) are not shipped. Versions are pinned 
 | uvicorn | BSD-3-Clause | |
 | YuNet face model (OpenCV Zoo) | MIT | downloaded at deploy time by tools/fetch_face_model.py, not in the repo |
 
-## Dependency license audit (2026-11-25)
+## License policy (decided 2026-11-26)
 
-Scanned the full installed tree (runtime and dev, 44 packages) with
-`uv run --with pip-licenses pip-licenses --format=csv --with-urls --order=license`. Re-run it before every release.
+- **Allowed:** MIT, BSD, Apache-2.0 and equivalents (PSF, HPND, ISC, Zlib, 0BSD).
+- **MPL-2.0: accepted only** for these unmodified third-party packages: `certifi` (HTTP certificates), `orjson` (web UI),
+  `tqdm` (model library), `pathspec` (development only). MPL-2.0 is file-level: it covers changes to those files, not our code.
+  Never copy or modify their source in this repository. Any other MPL package needs a new decision.
+- **Forbidden:** GPL, AGPL, SSPL, non-commercial licenses (so no Ultralytics YOLO).
+- **Bundled inside wheels, not covered by the package check:** OpenCV ships FFmpeg (LGPL-2.1, dynamically linked); the CUDA
+  build of PyTorch ships NVIDIA libraries under NVIDIA's own terms. We do not redistribute either in this repository. Review
+  both before shipping a device image or Docker image.
 
-- **Permissive (Apache-2.0, MIT, BSD, MIT-CMU/HPND, PSF, 0BSD, Zlib):** everything except the two packages below. This includes
-  numpy, Pillow, OpenCV, pydantic, PyYAML, FastAPI, Starlette, uvicorn, httpx/httpcore/h11, anyio, opentelemetry-api (pulled in by the web stack).
-- **MPL-2.0 (weak, file-level copyleft): `certifi` (runtime, required by httpx) and `pathspec` (development tooling only).**
-  MPL-2.0 only requires that modifications to those files be shared; using them unmodified as separate packages is normally fine,
-  but it does not meet the project rule "Apache/MIT/BSD only". **Decision needed from the owner:** accept MPL-2.0 for `certifi`, or
-  replace the HTTP client. (`pathspec` is not shipped.)
-- **LGPL (bundled, not a Python dependency):** the OpenCV wheel ships FFmpeg under LGPL-2.1, dynamically linked. Still to confirm.
-- **Not scanned:** optional extras (`onnxruntime`, `torch`), model weights and datasets (each needs its own check when adopted).
+This reflects an engineering reading of package metadata, not legal advice.
+
+## Verified (2026-11-26)
+
+86 installed packages (runtime, vision, app, dev) pass the policy. Models, checked at their source:
+
+| Model | License |
+| --- | --- |
+| google/owlv2-base-patch16-ensemble | Apache-2.0 |
+| IDEA-Research/grounding-dino-tiny | Apache-2.0 |
+| facebook/dinov2-small | Apache-2.0 |
+| YuNet face detector (OpenCV Zoo) | MIT |
+
+Training data of those pretrained models has not been reviewed. Added in this step: transformers (Apache-2.0), torch and
+torchvision (BSD-3-Clause), scipy (BSD-3-Clause), gradio (Apache-2.0).

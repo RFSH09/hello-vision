@@ -25,6 +25,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --group dev
       - run: uv run mypy
+      - run: uv run python tools/check_licenses.py
 
   test:
     runs-on: ubuntu-latest
