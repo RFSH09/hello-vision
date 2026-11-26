@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
 OTHER = "other"
@@ -19,14 +19,22 @@ class CartReport:
     count_accuracy: float  # quantity right, among items correctly detected as present
     confusion: Counter[tuple[str, str]]
     disagreements: list[str] = field(default_factory=list)
+    false_charge_rate: float = 0.0  # auto-charged sessions with any item not bought
+    review_rate: float = 0.0  # sessions sent to a person instead of charged
+    auto_exact: float = 0.0  # exact carts among the auto-charged sessions
 
 
 def evaluate_carts(
     truth: Mapping[str, Mapping[str, int]],
     predicted: Mapping[str, Mapping[str, int]],
     classes: Sequence[str],
+    flagged: Collection[str] = (),
 ) -> CartReport:
-    """Compare predicted and true carts (both ``order -> {class: qty}``)."""
+    """Compare predicted and true carts (both ``order -> {class: qty}``).
+
+    ``flagged`` orders go to review: they are not charged automatically, so they do not
+    count towards the false-charge rate or the accuracy of automatic charges.
+    """
     orders = sorted(truth)
     tp: Counter[str] = Counter()
     fp: Counter[str] = Counter()
@@ -60,6 +68,9 @@ def evaluate_carts(
         for c in classes
     }
     n = len(orders)
+    auto = [o for o in orders if o not in flagged]
+    over = sum(any(q > truth[o].get(c, 0) for c, q in predicted.get(o, {}).items()) for o in auto)
+    exact_auto = sum(o not in wrong for o in auto)
     return CartReport(
         n,
         (n - len(wrong)) / n if n else 0.0,
@@ -67,6 +78,9 @@ def evaluate_carts(
         right_count / present_right if present_right else 0.0,
         confusion,
         wrong,
+        over / len(auto) if auto else 0.0,
+        (n - len(auto)) / n if n else 0.0,
+        exact_auto / len(auto) if auto else 0.0,
     )
 
 
@@ -75,9 +89,12 @@ def to_markdown(report: CartReport, title: str) -> str:
     lines = [
         f"## {title}",
         "",
-        f"- sessions: {report.sessions}",
-        f"- exact cart accuracy: {report.exact:.1%}",
+        f"- **wrong-charge rate (auto-charged sessions): {report.false_charge_rate:.1%}**",
+        f"- **sent to review: {report.review_rate:.1%}**",
+        f"- exact carts among auto-charged: {report.auto_exact:.1%}",
+        f"- exact cart accuracy (all sessions): {report.exact:.1%}",
         f"- count accuracy (items found): {report.count_accuracy:.1%}",
+        f"- sessions: {report.sessions}",
         "",
         "| class | precision | recall | sessions with it |",
         "| --- | --- | --- | --- |",

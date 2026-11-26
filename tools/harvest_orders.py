@@ -34,10 +34,14 @@ ADMIN_HOSTS = {"osonvend.uz", "www.osonvend.uz"}
 def import_export(args: argparse.Namespace) -> int:
     """CSV export -> records.jsonl."""
     try:
-        records = read_export(args.csv, SkuMapper.load(args.names))
+        records = read_export(args.csv, SkuMapper.load(args.names), args.skip_unknown)
     except UnknownProductError as exc:
         print(f"STOPPED: {exc}")
         return 2
+    complete = [r for r in records if len(r.videos) == 2]
+    if len(complete) < len(records):
+        print(f"skipping {len(records) - len(complete)} orders without both camera videos")
+    records = complete
     args.records.parent.mkdir(parents=True, exist_ok=True)
     args.records.write_text("".join(r.model_dump_json() + "\n" for r in records), encoding="utf-8")
     days = sorted(r.date for r in records)
@@ -121,6 +125,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--csv", type=Path, required=True)
     p.add_argument("--names", type=Path, default=Path("configs/sku_names.yaml"))
     p.add_argument("--records", type=Path, default=Path("data/history/orders.jsonl"))
+    p.add_argument(
+        "--skip-unknown", action="store_true", help="drop lines with unknown product names"
+    )
     p.set_defaults(run=import_export)
     p = sub.add_parser("probe")
     p.add_argument("urls", nargs="+")

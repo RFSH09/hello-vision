@@ -14,6 +14,7 @@ from hello_vision.weak.records import OrderRecord  # noqa: E402
 from hello_vision.weak.train import (  # noqa: E402
     TrainConfig,
     choose_classes,
+    choose_threshold,
     predict,
     target_cart,
     train,
@@ -64,3 +65,12 @@ def test_training_learns_a_planted_signal(tmp_path: Path) -> None:
     right = sum(carts[r.order_id] == r.items for r in records[32:])
     assert right >= 14 and (tmp_path / "m" / "model.pt").exists()
     assert attention["o33"].shape == (2, 6) and attention["o33"][0].argmax() == 2
+
+    threshold, safe = choose_threshold(model, records[32:], tmp_path, ["a", "b"], "cpu")
+    assert threshold == 0.5 and safe.false_charge_rate <= 0.01
+    flagged: set[str] = set()
+    carts, _ = predict(
+        model, records[32:], tmp_path, ["a", "b"], "cpu",
+        threshold=1.01, review_low=0.0, flagged=flagged,
+    )  # fmt: skip
+    assert not any(carts.values()) and len(flagged) == 16  # unsure -> review, nothing charged

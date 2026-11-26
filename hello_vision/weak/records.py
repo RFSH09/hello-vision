@@ -8,6 +8,7 @@ import re
 from collections import Counter
 from collections.abc import Iterable
 from datetime import date
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import yaml
@@ -26,6 +27,7 @@ class OrderRecord(BaseModel):
     date: date
     videos: list[str]  # URLs (before download) or file names (after)
     items: dict[str, int]  # gallery SKU -> quantity
+    skipped_lines: int = 0  # order lines dropped for an unknown product: cart incomplete
 
 
 class UnknownProductError(ValueError):
@@ -82,12 +84,29 @@ class SkuMapper:
         return dict(cart)
 
 
-def read_export(path: Path, mapper: SkuMapper) -> list[OrderRecord]:
+def propose_sku(name: str, price: int | None, prices: dict[str, int]) -> list[str]:
+    """Candidate SKUs for an unknown admin name: same price first, then name similarity.
+
+    A proposal only: a person must confirm it before it goes into the name map.
+    """
+    key = normalise(name)
+
+    def similarity(sku: str) -> float:
+        return SequenceMatcher(None, key, normalise(sku)).ratio()
+
+    same = [s for s, p in prices.items() if price is not None and p == price]
+    pool = same or list(prices)
+    return sorted(pool, key=similarity, reverse=True)[:3]
+
+
+def read_export(path: Path, mapper: SkuMapper, skip_unknown: bool = False) -> list[OrderRecord]:
     """Read a server-side CSV export (one row per order line, columns :data:`EXPORT_COLUMNS`).
 
     Raises:
         ValueError: Unexpected columns (to keep personal data out) or bad rows.
-        UnknownProductError: Unmapped product names, all listed at once.
+        UnknownProductError: Unmapped product names, all listed at once (only when
+            ``skip_unknown`` is false; otherwise those lines are dropped and counted in
+            ``skipped_lines``, and orders with no known line left are dropped).
     """
     with path.open(encoding="utf-8-sig", newline="") as fh:
         reader = csv.DictReader(fh)
@@ -99,7 +118,7 @@ def read_export(path: Path, mapper: SkuMapper) -> list[OrderRecord]:
             )
         rows = list(reader)
     unknown = [r["item_name"] for r in rows if mapper.get(r["item_name"]) is None]
-    if unknown:
+    if unknown and not skip_unknown:
         raise UnknownProductError(unknown)
     grouped: dict[str, list[dict[str, str]]] = {}
     for r in rows:
@@ -107,13 +126,17 @@ def read_export(path: Path, mapper: SkuMapper) -> list[OrderRecord]:
     out: list[OrderRecord] = []
     for order_id, lines in grouped.items():
         first = lines[0]
+        known = [r for r in lines if mapper.get(r["item_name"]) is not None]
+        if not known:
+            continue
         out.append(
             OrderRecord(
                 order_id=order_id,
                 fridge_key=first["fridge_key"],
                 date=date.fromisoformat(first["date"][:10]),
                 videos=[u for u in (first["video0_url"], first["video1_url"]) if u],
-                items=mapper.cart((r["item_name"], int(r["qty"])) for r in lines),
+                items=mapper.cart((r["item_name"], int(r["qty"])) for r in known),
+                skipped_lines=len(lines) - len(known),
             )
         )
     return out

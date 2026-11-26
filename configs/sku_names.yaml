@@ -15,3 +15,46 @@ names:
   "Sendvich": sandwich
   "Snickers 80g": snickers-super-80
   "Tuc. 25g": tuc-25
+  "Fusetea.r 0.5L": fuse-tea-05
+  "Twix 75g": twix-xtra-75
+  "Lays 70g": lays-70
+  "Chortoq 0.5l": chortoq-05
+  "Hazel255g": hazel-255
+  "Moxito.q 0.5L": moxito-05
+  "Lactel 1l": lactel-1l
+  # confirmed by price: the only 0.25 L and 0.33 L Red Bull sold
+  "Red bull 0.25l": redbull-025-sf
+  "RedBull 0.33L": redbull-03
+
+# retail prices in so'm; only used to PROPOSE a mapping for a new name
+prices:
+  18plus-045: 14000
+  adrenaline-05: 20000
+  bonaqua-05: 5000
+  bounty-57: 11000
+  bruni-choco: 16000
+  chernogolovka-dyushes-05: 14000
+  chortoq-05: 14000
+  coca-cola-05: 9000
+  fanta-05: 9000
+  fuse-tea-05: 9000
+  gorilla-045: 14000
+  hazel-255: 18000
+  keshyu-40: 18000
+  kitkat-duo-64: 14000
+  lactel-1l: 21000
+  lays-70: 17000
+  minikruosan-105: 21000
+  montella-anor-05: 14000
+  moxito-05: 14000
+  pulpy-orange-05: 15000
+  qurt-45: 12000
+  redbull-025-sf: 22000
+  redbull-03: 30000
+  sandwich: 17000
+  snickers-super-80: 14000
+  sochnaya-dolina-olma-1l: 15000
+  super-kontik-100: 10000
+  tuc-25: 14000
+  twix-xtra-75: 14000
+  viko-olma-1l: 20000

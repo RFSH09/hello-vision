@@ -88,8 +88,16 @@ def predict(
     classes: Sequence[str],
     device: str,
     batch_size: int = 16,
+    threshold: float = 0.5,
+    review_low: float | None = None,
+    flagged: set[str] | None = None,
 ) -> tuple[dict[str, dict[str, int]], dict[str, np.ndarray[Any, Any]]]:
-    """Predicted carts and per-class frame attention for each order."""
+    """Predicted carts and per-class frame attention for each order.
+
+    An item is charged only if its presence probability reaches ``threshold``. With
+    ``review_low``, orders having any probability in ``[review_low, threshold)`` are added
+    to ``flagged`` (an unsure item goes to a person instead of being charged or dropped).
+    """
     model.eval()
     carts: dict[str, dict[str, int]] = {}
     attention: dict[str, np.ndarray[Any, Any]] = {}
@@ -97,10 +105,16 @@ def predict(
         chunk = records[i : i + batch_size]
         with torch.inference_mode():
             out = model(*load_batch(chunk, features, device))
-        counts = decode(out).cpu().numpy()
+        counts = decode(out, threshold).cpu().numpy()
+        probs = out["presence"].sigmoid().cpu().numpy()
         for k, r in enumerate(chunk):
             carts[r.order_id] = {c: int(n) for c, n in zip(classes, counts[k], strict=True) if n}
             attention[r.order_id] = out["attention"][k].cpu().numpy()
+            unsure = review_low is not None and bool(
+                ((probs[k] >= review_low) & (probs[k] < threshold)).any()
+            )
+            if flagged is not None and unsure:
+                flagged.add(r.order_id)
     return carts, attention
 
 
@@ -110,11 +124,44 @@ def evaluate(
     features: Path,
     classes: Sequence[str],
     device: str,
+    threshold: float = 0.5,
+    review_low: float | None = None,
 ) -> CartReport:
-    """Evaluate on a split."""
-    carts, _ = predict(model, records, features, classes, device)
+    """Evaluate on a split (see :func:`predict` for the charging rule)."""
+    flagged: set[str] = set()
+    carts, _ = predict(
+        model, records, features, classes, device,
+        threshold=threshold, review_low=review_low, flagged=flagged,
+    )  # fmt: skip
     truth = {r.order_id: target_cart(r.items, classes) for r in records}
-    return evaluate_carts(truth, carts, classes)
+    return evaluate_carts(truth, carts, classes, flagged)
+
+
+THRESHOLDS = (0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98)
+REVIEW_LOW = 0.2
+
+
+def choose_threshold(
+    model: SessionMIL,
+    val_records: Sequence[OrderRecord],
+    features: Path,
+    classes: Sequence[str],
+    device: str,
+    max_false_charge: float = 0.01,
+) -> tuple[float, CartReport]:
+    """Pick the charging threshold on VALIDATION data, favouring misses over wrong charges.
+
+    Returns the lowest threshold whose wrong-charge rate is within ``max_false_charge``;
+    if none is, the threshold with the fewest wrong charges.
+    """
+    results = [
+        (t, evaluate(model, val_records, features, classes, device, t, REVIEW_LOW))
+        for t in THRESHOLDS
+    ]
+    for t, report in results:
+        if report.false_charge_rate <= max_false_charge:
+            return t, report
+    return min(results, key=lambda x: (x[1].false_charge_rate, -x[0]))
 
 
 def train(

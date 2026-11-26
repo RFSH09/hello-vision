@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -75,6 +76,14 @@ def redact(html: str) -> str:
     html = re.sub(r"[\w.+-]+@[\w-]+\.[\w.]+", "[email]", html)
     # digit runs of 7+, allowing spaces, dashes and brackets between digits
     return re.sub(r"\+?\d(?:[\s()-]?\d){6,}", "[number]", html)
+
+
+def keep_awake() -> None:
+    """Ask Windows not to sleep while this process runs (no effect elsewhere)."""
+    if sys.platform == "win32":
+        import ctypes
+
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)
 
 
 @dataclass

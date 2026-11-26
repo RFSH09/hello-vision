@@ -20,11 +20,13 @@ from typing import Any
 import cv2
 import numpy as np
 
-from hello_vision.weak.metrics import to_markdown
+from hello_vision.weak.metrics import evaluate_carts, to_markdown
 from hello_vision.weak.records import OrderRecord, load_records
 from hello_vision.weak.train import (
+    REVIEW_LOW,
     TrainConfig,
     choose_classes,
+    choose_threshold,
     evaluate,
     predict,
     target_cart,
@@ -82,6 +84,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parts = {
         s: [r for r in records if splits.get(r.order_id) == s] for s in ("train", "val", "test")
     }
+    # an order with a dropped product line has an incomplete cart: fine to learn from,
+    # not fine to be judged on
+    incomplete = 0
+    for name in ("val", "test"):
+        kept = [r for r in parts[name] if not r.skipped_lines]
+        incomplete += len(parts[name]) - len(kept)
+        parts[name] = kept
     for name, members in parts.items():
         if not members:
             raise SystemExit(f"the {name} split is empty")
@@ -92,7 +101,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     rng = np.random.default_rng(0)
     shuffled = [parts["train"][i] for i in rng.permutation(full)]  # nested subsets
     classes = choose_classes(parts["train"], args.top)  # same classes for every size
-    curve: list[tuple[int, float]] = []
+    curve: list[tuple[int, float, float]] = []
     model = None
     for size in sizes:
         print(f"--- training on {size} orders", flush=True)
@@ -100,11 +109,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         model = train(shuffled[:size], parts["val"], args.features, classes, run_dir, cfg)
         device = str(next(model.parameters()).device)
         result = evaluate(model, parts["test"], args.features, classes, device)
-        curve.append((size, result.exact))
+        curve.append((size, result.exact, result.false_charge_rate))
     assert model is not None  # noqa: S101
     device = str(next(model.parameters()).device)
-    carts, attention = predict(model, parts["test"], args.features, classes, device)
-    final = evaluate(model, parts["test"], args.features, classes, device)
+    threshold, val_safe = choose_threshold(model, parts["val"], args.features, classes, device)
+    plain = evaluate(model, parts["test"], args.features, classes, device)
+    flagged: set[str] = set()
+    carts, attention = predict(
+        model, parts["test"], args.features, classes, device,
+        threshold=threshold, review_low=REVIEW_LOW, flagged=flagged,
+    )  # fmt: skip
+    truth = {r.order_id: target_cart(r.items, classes) for r in parts["test"]}
+    final = evaluate_carts(truth, carts, classes, flagged)
     baseline = sum(target_cart(r.items, classes) == {classes[0]: 1} for r in parts["test"]) / len(
         parts["test"]
     )
@@ -114,13 +130,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         to_markdown(final, "Test (unseen fridges and days)"),
     ]
     report += [
+        "## Charging rule",
+        "",
+        f"An item is charged only at probability >= {threshold}, chosen on validation data "
+        f"(wrong-charge rate there: {val_safe.false_charge_rate:.1%}). An order with any "
+        f"probability from {REVIEW_LOW} up to that threshold goes to review.",
+        f"For comparison, charging everything at 0.5 with no review gives a wrong-charge rate "
+        f"of {plain.false_charge_rate:.1%} and {plain.exact:.1%} exact carts.",
+        "",
         f"Reference: always answering `{classes[0]} x1` would score {baseline:.1%} exact.",
         "",
         "## Accuracy vs number of training orders",
         "",
-        "| training orders | test exact cart |",
-        "| --- | --- |",
-        *[f"| {n} | {acc:.1%} |" for n, acc in curve],
+        "| training orders | test exact cart | wrong-charge rate (charging at 0.5) |",
+        "| --- | --- | --- |",
+        *[f"| {n} | {acc:.1%} | {wrong:.1%} |" for n, acc, wrong in curve],
+        "",
+        f"Split sizes: train {len(parts['train'])}, val {len(parts['val'])}, "
+        f"test {len(parts['test'])}. Left out of val/test because a product line was "
+        f"unknown: {incomplete}.",
     ]
     (args.out / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     by_id = {r.order_id: r for r in parts["test"]}

@@ -274,3 +274,14 @@ def test_download_selection_skips_excluded_and_keeps_held_out(tmp_path: Path) ->
     store = tmp_path / "o.jsonl"
     append_record(store, record(1))
     assert harvest_main(["download", "--records", str(store), "--dest", str(tmp_path / "v")]) == 2
+
+
+def test_false_charges_count_only_automatic_charges() -> None:
+    truth = {"1": {"a": 1}, "2": {"a": 1}, "3": {}, "4": {"a": 2}}
+    pred = {"1": {"a": 1}, "2": {"b": 1}, "3": {"a": 1}, "4": {"a": 1}}
+    everything = evaluate_carts(truth, pred, ["a", "b"])
+    assert everything.false_charge_rate == 0.5 and everything.review_rate == 0
+    reviewed = evaluate_carts(truth, pred, ["a", "b"], flagged={"3"})
+    assert reviewed.false_charge_rate == pytest.approx(1 / 3) and reviewed.review_rate == 0.25
+    assert reviewed.auto_exact == pytest.approx(1 / 3)
+    assert "wrong-charge rate" in to_markdown(reviewed, "t")
