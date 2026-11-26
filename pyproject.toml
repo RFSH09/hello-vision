@@ -90,6 +90,13 @@ files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/harvest_orders.py"
 module = ["onnxruntime", "torch", "torch.*", "torchvision", "torchvision.*", "transformers", "scipy", "scipy.*", "gradio"]
 ignore_missing_imports = true
 
+# These two modules build on torch, which CI does not install (it is typed as Any there).
+[[tool.mypy.overrides]]
+module = ["hello_vision.weak.model", "hello_vision.weak.train"]
+disallow_subclassing_any = false
+warn_return_any = false
+warn_unused_ignores = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
