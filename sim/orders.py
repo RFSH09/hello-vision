@@ -57,6 +57,7 @@ class OrderScore:
     actual: Counter[str]
     seen: set[str] = field(default_factory=set)  # SKUs identified on any track
     unknown: int = 0  # held items the module could not identify (would go to review)
+    multiple: bool = False  # items held together: quantity needs a human check
 
     @property
     def correct(self) -> int:
@@ -102,14 +103,15 @@ def report(scores: Sequence[OrderScore]) -> str:
     """Markdown table, totals and most confused pairs."""
     lines = [
         "| order | detected (naive taken) | actual (orders.csv) | correct | wrong | missed | "
-        "unidentified | exact | actual SKU seen on any track |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "unidentified | exact | actual SKU seen on any track | multiple? |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for s in scores:
         seen = f"{len(set(s.actual) & s.seen)}/{len(set(s.actual))}"
         lines.append(
             f"| {s.order} | {fmt(s.predicted)} | {fmt(s.actual)} | {s.correct} | {s.wrong} | "
-            f"{s.missed} | {s.unknown} | {'yes' if s.exact else 'no'} | {seen} |"
+            f"{s.missed} | {s.unknown} | {'yes' if s.exact else 'no'} | {seen} | "
+            f"{'REVIEW' if s.multiple else ''} |"
         )
     n = len(scores)
     exact = sum(s.exact for s in scores)

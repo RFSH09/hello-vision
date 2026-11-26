@@ -12,7 +12,10 @@ from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from hello_vision.detect.types import Detection, iou
+from hello_vision.identify.embedders import Vector
 from hello_vision.identify.index import Match
 
 
@@ -26,6 +29,14 @@ class SimpleTrack:
     dets: list[Detection] = field(default_factory=list)
     matches: list[Match | None] = field(default_factory=list)
     missed: int = 0
+    appearance: Vector | None = None  # running mean embedding
+
+    def remember(self, vector: Vector | None) -> None:
+        """Blend ``vector`` into the running appearance of the track."""
+        if vector is None:
+            return
+        mixed = vector if self.appearance is None else 0.7 * self.appearance + 0.3 * vector
+        self.appearance = np.asarray(mixed / np.linalg.norm(mixed), dtype=np.float32)
 
     @property
     def last(self) -> Detection:
@@ -87,6 +98,9 @@ class ByteSimpleTracker:
         iou_threshold: Minimum IoU against the predicted box.
         max_distance: Fallback centre distance, as a multiple of the box diagonal.
         max_missed: Processed frames a track survives without a detection.
+        min_appearance: When embeddings are given, a detection whose cosine similarity to the
+            track's running appearance is below this cannot join it, so a track that would
+            drift onto another object is split instead.
     """
 
     def __init__(
@@ -96,16 +110,27 @@ class ByteSimpleTracker:
         iou_threshold: float = 0.2,
         max_distance: float = 1.0,
         max_missed: int = 5,
+        min_appearance: float = 0.0,
     ) -> None:
         self.label = label
         self.high_score = high_score
         self.iou_threshold = iou_threshold
         self.max_distance = max_distance
         self.max_missed = max_missed
+        self.min_appearance = min_appearance
         self.tracks: list[SimpleTrack] = []
         self._active: list[SimpleTrack] = []
 
-    def _affinity(self, track: SimpleTrack, det: Detection) -> float:
+    def _affinity(self, track: SimpleTrack, det: Detection, vector: Vector | None = None) -> float:
+        similarity = 0.0
+        if vector is not None and track.appearance is not None:
+            similarity = float(track.appearance @ vector)
+            if similarity < self.min_appearance:
+                return 0.0
+        geometry = self._geometry(track, det)
+        return geometry + 0.5 * similarity if geometry > 0 else 0.0
+
+    def _geometry(self, track: SimpleTrack, det: Detection) -> float:
         pred = track.predicted()
         overlap = max(iou(pred, det), iou(track.last, det))
         if overlap >= self.iou_threshold:
@@ -117,13 +142,16 @@ class ByteSimpleTracker:
         return 1.0 - dist / limit if dist < limit else 0.0
 
     def _match(
-        self, tracks: list[SimpleTrack], dets: list[tuple[int, Detection]]
+        self,
+        tracks: list[SimpleTrack],
+        dets: list[tuple[int, Detection]],
+        vectors: Sequence[Vector | None] | None,
     ) -> dict[int, SimpleTrack]:
         pairs = sorted(
             (
-                (self._affinity(t, d), ti, di)
+                (self._affinity(t, d, vectors[i] if vectors else None), ti, di)
                 for ti, t in enumerate(tracks)
-                for di, (_, d) in enumerate(dets)
+                for di, (i, d) in enumerate(dets)
             ),
             reverse=True,
         )
@@ -141,7 +169,11 @@ class ByteSimpleTracker:
         return out
 
     def update(
-        self, frame: int, dets: Sequence[Detection], matches: Sequence[Match | None] | None = None
+        self,
+        frame: int,
+        dets: Sequence[Detection],
+        matches: Sequence[Match | None] | None = None,
+        vectors: Sequence[Vector | None] | None = None,
     ) -> dict[int, SimpleTrack]:
         """Add one processed frame.
 
@@ -149,6 +181,7 @@ class ByteSimpleTracker:
             frame: Processed-frame counter.
             dets: All detections of the frame (other labels are ignored).
             matches: SKU identification per detection (same order), or ``None``.
+            vectors: Embedding per detection (same order) for appearance association.
 
         Returns:
             Detection index -> track for every detection that belongs to a track.
@@ -156,15 +189,17 @@ class ByteSimpleTracker:
         mine = [(i, d) for i, d in enumerate(dets) if d.label == self.label]
         high = [(i, d) for i, d in mine if d.score >= self.high_score]
         low = [(i, d) for i, d in mine if d.score < self.high_score]
-        assigned = self._match(self._active, high)
+        assigned = self._match(self._active, high, vectors)
         taken = {id(t) for t in assigned.values()}
-        assigned.update(self._match([t for t in self._active if id(t) not in taken], low))
+        rest = [t for t in self._active if id(t) not in taken]
+        assigned.update(self._match(rest, low, vectors))
         taken = {id(t) for t in assigned.values()}
         for i, track in assigned.items():
             track.frames.append(frame)
             track.dets.append(dets[i])
             track.matches.append(matches[i] if matches else None)
             track.missed = 0
+            track.remember(vectors[i] if vectors else None)
         still: list[SimpleTrack] = []
         for t in self._active:
             if id(t) not in taken:
@@ -177,6 +212,7 @@ class ByteSimpleTracker:
                 t.frames.append(frame)
                 t.dets.append(d)
                 t.matches.append(matches[i] if matches else None)
+                t.remember(vectors[i] if vectors else None)
                 self.tracks.append(t)
                 still.append(t)
                 assigned[i] = t

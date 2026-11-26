@@ -37,6 +37,7 @@ app = ["gradio>=5"]
 hv-demo = "sim.run_video:main"
 hv-batch = "sim.run_video:batch"
 hv-app = "hello_vision.review.demo_app:main"
+hv-viewer = "sim.viewer:main"
 
 [dependency-groups]
 dev = [

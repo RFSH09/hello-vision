@@ -60,8 +60,8 @@ def thumbnails(
             if not ok:
                 continue
             frame = np.asarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), dtype=np.uint8)
-            if models.blurrer:
-                frame = models.blurrer.blur(frame)
+            if models.blurrer:  # display only; the product itself is protected
+                frame = models.blurrer.blur(frame, protect=[tuple(best[1:5])])
             label = f"#{t['track_id']} {t['sku'] or 'unknown'}"
             out.append((pad_crop(frame, best[1:5]), label))
     finally:
