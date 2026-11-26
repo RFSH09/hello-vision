@@ -27,3 +27,9 @@ def test_author_audit() -> None:
     assert not check_authors.audit(["A <a@x>", "A <a@x>"], "msg")
     assert check_authors.audit(["A <a@x>", "B <b@x>"], "msg")
     assert check_authors.audit(["A <a@x>"], "Co-authored-by: B")
+
+
+def test_only_the_root_lock_file_gets_a_larger_limit() -> None:
+    assert not check_files.check_path("uv.lock", 600_000, 524_288)
+    assert check_files.check_path("uv.lock", 3_000_000, 524_288)
+    assert check_files.check_path("docs/uv.lock", 600_000, 524_288)

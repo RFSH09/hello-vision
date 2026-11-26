@@ -175,8 +175,9 @@ def annotate(
 
 
 def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
-    """MPEG-4 writer (this OpenCV build has no H.264 encoder)."""
-    writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*"mp4v"), fps, size)
+    """VP8 for ``.webm`` (plays in browsers), else MPEG-4; this OpenCV build has no H.264."""
+    codec = "VP80" if path.suffix.lower() == ".webm" else "mp4v"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*codec), fps, size)
     if not writer.isOpened():
         raise RuntimeError(f"cannot open a video writer for {path}")
     return writer

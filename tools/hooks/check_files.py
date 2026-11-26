@@ -30,6 +30,8 @@ BLOCKED_TOP_DIRS = frozenset(
     {"data", "datasets", "private", "secrets", "evidence", "out", "models"}
 )
 ENV_ALLOWED = frozenset({".env.example"})
+# generated dependency lock file: legitimately large, so it gets its own limit
+SIZE_LIMITS = {"uv.lock": 2 * 1024 * 1024}
 
 
 def check_path(path: str, size: int | None, max_bytes: int) -> list[str]:
@@ -52,6 +54,7 @@ def check_path(path: str, size: int | None, max_bytes: int) -> list[str]:
     name = p.name.lower()
     if (name == ".env" or name.startswith(".env.")) and name not in ENV_ALLOWED:
         problems.append("environment file")
+    max_bytes = SIZE_LIMITS.get(str(p), max_bytes)
     if size is not None and size > max_bytes:
         problems.append(f"{size // 1024} KB exceeds limit of {max_bytes // 1024} KB")
     return problems

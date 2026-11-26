@@ -50,6 +50,10 @@ uv sync --group dev --extra vision
 uv run --extra vision python tools/fetch_face_model.py --out models
 uv run --extra vision hv-demo --video data/videos/X.mp4 --out out/X.mp4
 uv run --extra vision hv-batch --videos data/videos --orders data/orders.csv --out out
+uv run --extra vision --extra app hv-app                      # local demo UI on http://127.0.0.1:7860
+uv run --extra vision python tools/make_label_sheet.py         # out/labeling/index.html: name real crops
+uv run --extra vision python tools/apply_labels.py --labels data/labels.json   # score on unseen orders
+uv run --extra vision python tools/autolabel.py --count 500    # CVAT / Label Studio pre-annotations
 ```
 
 This is a first, untrained baseline: it is **not** accurate enough to produce a cart. Face blurring in the
