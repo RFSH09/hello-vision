@@ -284,4 +284,7 @@ def test_false_charges_count_only_automatic_charges() -> None:
     reviewed = evaluate_carts(truth, pred, ["a", "b"], flagged={"3"})
     assert reviewed.false_charge_rate == pytest.approx(1 / 3) and reviewed.review_rate == 0.25
     assert reviewed.auto_exact == pytest.approx(1 / 3)
-    assert "wrong-charge rate" in to_markdown(reviewed, "t")
+    assert "wrong-charge rate (auto-charged sessions)" in to_markdown(reviewed, "t")
+    nothing = evaluate_carts(truth, pred, ["a", "b"], flagged=set(truth))
+    assert nothing.auto_sessions == 0 and "NOTHING was charged" in to_markdown(nothing, "t")
+    assert "0.0%** (" not in to_markdown(nothing, "t")

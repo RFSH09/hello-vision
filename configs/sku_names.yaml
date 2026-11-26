@@ -25,6 +25,11 @@ names:
   # confirmed by price: the only 0.25 L and 0.33 L Red Bull sold
   "Red bull 0.25l": redbull-025-sf
   "RedBull 0.33L": redbull-03
+  "Super kontik": super-kontik-100
+  "Gorilla.U 0.45l": gorilla-045
+  "Adrenaline": adrenaline-05
+  "Moxito 0.5l": moxito-05
+  "Tuc 25g": tuc-25
 
 # retail prices in so'm; only used to PROPOSE a mapping for a new name
 prices:

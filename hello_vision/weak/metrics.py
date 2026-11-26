@@ -22,6 +22,7 @@ class CartReport:
     false_charge_rate: float = 0.0  # auto-charged sessions with any item not bought
     review_rate: float = 0.0  # sessions sent to a person instead of charged
     auto_exact: float = 0.0  # exact carts among the auto-charged sessions
+    auto_sessions: int = 0  # sessions charged automatically; 0 makes the two rates meaningless
 
 
 def evaluate_carts(
@@ -81,17 +82,28 @@ def evaluate_carts(
         over / len(auto) if auto else 0.0,
         (n - len(auto)) / n if n else 0.0,
         exact_auto / len(auto) if auto else 0.0,
+        len(auto),
     )
 
 
 def to_markdown(report: CartReport, title: str) -> str:
     """Render a report."""
+    if report.auto_sessions:
+        charged = [
+            f"- **wrong-charge rate (auto-charged sessions): {report.false_charge_rate:.1%}** "
+            f"({report.auto_sessions} charged)",
+            f"- **sent to review: {report.review_rate:.1%}**",
+            f"- exact carts among auto-charged: {report.auto_exact:.1%}",
+        ]
+    else:
+        charged = [
+            "- **wrong-charge rate: not measurable, NOTHING was charged automatically**",
+            f"- **sent to review: {report.review_rate:.1%}**",
+        ]
     lines = [
         f"## {title}",
         "",
-        f"- **wrong-charge rate (auto-charged sessions): {report.false_charge_rate:.1%}**",
-        f"- **sent to review: {report.review_rate:.1%}**",
-        f"- exact carts among auto-charged: {report.auto_exact:.1%}",
+        *charged,
         f"- exact cart accuracy (all sessions): {report.exact:.1%}",
         f"- count accuracy (items found): {report.count_accuracy:.1%}",
         f"- sessions: {report.sessions}",

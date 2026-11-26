@@ -132,8 +132,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     report += [
         "## Charging rule",
         "",
-        f"An item is charged only at probability >= {threshold}, chosen on validation data "
-        f"(wrong-charge rate there: {val_safe.false_charge_rate:.1%}). An order with any "
+        f"An item is charged only at probability >= {threshold}. On validation data this "
+        + (
+            f"charged {val_safe.auto_sessions} of {val_safe.sessions} orders with a "
+            f"wrong-charge rate of {val_safe.false_charge_rate:.1%}. "
+            if val_safe.auto_sessions
+            else "charged NOTHING at any threshold, so no safe threshold exists yet. "
+        )
+        + "An order with any "
         f"probability from {REVIEW_LOW} up to that threshold goes to review.",
         f"For comparison, charging everything at 0.5 with no review gives a wrong-charge rate "
         f"of {plain.false_charge_rate:.1%} and {plain.exact:.1%} exact carts.",

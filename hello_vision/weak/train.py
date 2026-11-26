@@ -79,6 +79,7 @@ class TrainConfig:
     patience: int = 6
     seed: int = 0
     width: int = 192
+    max_pos_weight: float = 5.0  # cap on the extra weight of rare products
 
 
 def predict(
@@ -151,17 +152,22 @@ def choose_threshold(
 ) -> tuple[float, CartReport]:
     """Pick the charging threshold on VALIDATION data, favouring misses over wrong charges.
 
-    Returns the lowest threshold whose wrong-charge rate is within ``max_false_charge``;
-    if none is, the threshold with the fewest wrong charges.
+    Only thresholds that charge at least one order automatically can qualify (a rate over
+    zero charges proves nothing). Returns the lowest such threshold whose wrong-charge rate
+    is within ``max_false_charge``; if none is, the one with the fewest wrong charges. If
+    no threshold charges anything, the first one is returned with ``auto_sessions == 0``.
     """
     results = [
         (t, evaluate(model, val_records, features, classes, device, t, REVIEW_LOW))
         for t in THRESHOLDS
     ]
-    for t, report in results:
+    usable = [(t, r) for t, r in results if r.auto_sessions]
+    if not usable:
+        return results[0]
+    for t, report in usable:
         if report.false_charge_rate <= max_false_charge:
             return t, report
-    return min(results, key=lambda x: (x[1].false_charge_rate, -x[0]))
+    return min(usable, key=lambda x: (x[1].false_charge_rate, -x[0]))
 
 
 def train(
@@ -186,7 +192,10 @@ def train(
     model = SessionMIL(len(classes), dim=dim, width=cfg.width).to(device)
     targets = [target_cart(r.items, classes) for r in train_records]
     positives = torch.tensor([sum(c in t for t in targets) for c in classes], dtype=torch.float32)
-    pos_weight = (((len(targets) - positives) / positives.clamp(min=1)).clamp(1, 20)).to(device)
+    # square root of the imbalance: the full ratio made the model predict rare products far
+    # too readily, i.e. wrong charges
+    ratio = (len(targets) - positives) / positives.clamp(min=1)
+    pos_weight = ratio.sqrt().clamp(1, cfg.max_pos_weight).to(device)
     optimiser = torch.optim.AdamW(model.parameters(), cfg.lr, weight_decay=cfg.weight_decay)
     scaler = torch.amp.GradScaler("cuda", enabled=device == "cuda")
 
