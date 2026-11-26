@@ -1,0 +1,17 @@
+# Admin product name -> gallery SKU. Names are compared ignoring case, spaces and punctuation.
+# Unknown names stop the import: add them here, never guess.
+names:
+  "18+ 0.45l": 18plus-045
+  "Bounty 57g": bounty-57
+  "Bruni190g": bruni-choco
+  "Cola 0.5l": coca-cola-05
+  "cola.k 0.5L": coca-cola-05
+  "Fanta 0.5l": fanta-05
+  "Gorilla 0.45l": gorilla-045
+  "Kitkat 64g": kitkat-duo-64
+  "keshyu 40g": keshyu-40
+  "Qurt 45g": qurt-45
+  "S.dolina 1L": sochnaya-dolina-olma-1l
+  "Sendvich": sandwich
+  "Snickers 80g": snickers-super-80
+  "Tuc. 25g": tuc-25

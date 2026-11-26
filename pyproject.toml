@@ -84,7 +84,7 @@ convention = "google"
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/make_label_sheet.py", "tools/apply_labels.py", "tools/fetch_videos.py", "tools/autolabel.py", "tools/check_licenses.py", "tools/import_packshots.py", "tools/gen_synthetic.py", "tools/fetch_face_model.py", "tools/labeling_convert.py", "tools/weak_labels.py"]
+files = ["hello_vision", "sim", "eval", "tools/hooks", "tools/harvest_orders.py", "tools/extract_features.py", "tools/train_mil.py", "tools/make_label_sheet.py", "tools/apply_labels.py", "tools/fetch_videos.py", "tools/autolabel.py", "tools/check_licenses.py", "tools/import_packshots.py", "tools/gen_synthetic.py", "tools/fetch_face_model.py", "tools/labeling_convert.py", "tools/weak_labels.py"]
 
 [[tool.mypy.overrides]]
 module = ["onnxruntime", "torch", "torch.*", "torchvision", "torchvision.*", "transformers", "scipy", "scipy.*", "gradio"]
