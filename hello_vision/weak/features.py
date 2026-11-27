@@ -136,7 +136,15 @@ class DinoTokenEncoder:
         from transformers import AutoModel
 
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        model: Any = AutoModel.from_pretrained(model_id, cache_dir=str(cache_dir))
+        # use the saved copy first: even a cached model makes an online check, which can hang
+        # for good on a bad network
+        model: Any
+        try:
+            model = AutoModel.from_pretrained(
+                model_id, cache_dir=str(cache_dir), local_files_only=True
+            )
+        except OSError:  # not downloaded yet
+            model = AutoModel.from_pretrained(model_id, cache_dir=str(cache_dir))
         self.model = model.to(self.device).eval()
         self.size = size
         self.batch_size = batch_size
