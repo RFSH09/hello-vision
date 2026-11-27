@@ -16,7 +16,7 @@ import json
 import time
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,9 @@ import numpy as np
 
 from hello_vision.capture.types import Image
 from hello_vision.detect.types import Detection, Detector
+from hello_vision.identify.embedders import Vector
 from hello_vision.identify.index import GalleryIndex, Match, crop
+from hello_vision.identify.product_filter import ProductFilter
 from hello_vision.privacy.blur import Box, FaceBlurrer, FaceDetector, YuNetFaceDetector
 from hello_vision.track.simple import ByteSimpleTracker, SimpleTrack
 from sim.orders import OrderScore, count_items, fmt, merge_cameras, order_id, report
@@ -34,6 +36,10 @@ VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v", ".ts", ".dav"
 KNOWN, UNKNOWN, HAND = (40, 200, 40), (255, 165, 0), (230, 40, 200)  # RGB
 FACE_MODEL = "face_detection_yunet_2023mar.onnx"
 SHELF_LINE = 0.45  # fraction of the frame height; products above it are treated as stock
+PRODUCT_THRESHOLD = 0.4  # product filter probability below this = rejected
+MIN_APPEARANCE = 0.5  # cosine to the track appearance needed to continue a track
+MAX_HAND_AREA = 0.15  # larger "hand" boxes are whole people; ignored
+MAX_ITEM_AREA = 0.08  # larger boxes are never counted as a held item
 DARK = 14.0  # mean brightness below this = door closed, nothing to detect
 
 
@@ -79,6 +85,7 @@ class Models:
     index: GalleryIndex
     name: str
     blurrer: FaceBlurrer | None = None
+    product_filter: ProductFilter | None = None
 
 
 @dataclass
@@ -94,6 +101,7 @@ class VideoResult:
     seconds: float
     video_seconds: float
     notes: list[str] = field(default_factory=list)
+    hands: list[list[float]] = field(default_factory=list)  # [time s, x1, y1, x2, y2, score]
 
 
 def load_models(
@@ -226,7 +234,10 @@ def summarise_tracks(
         if shelf_line is None:
             taken = bool(touched and moved and (gone or near_edge))
         else:  # fridge cameras: shelf on top, a taken item shows up in a hand below it
-            taken = sum(d.center[1] > shelf_line * height for d in held) >= 2
+            area_limit = MAX_ITEM_AREA * width * height
+            taken = (
+                sum(d.center[1] > shelf_line * height and d.area <= area_limit for d in held) >= 2
+            )
         out.append(
             {
                 "track_id": t.id,
@@ -258,6 +269,29 @@ def summarise_tracks(
     return out
 
 
+def flag_multiple(tracks: list[dict[str, Any]], min_shared: int = 2) -> None:
+    """Mark taken tracks that are held together with another one (possibly several items).
+
+    Two taken tracks seen in at least ``min_shared`` of the same moments, with boxes close to
+    each other, mean one hand (or both) holds more than one object: the quantity is uncertain.
+    """
+    taken = [t for t in tracks if t["taken_guess"]]
+    for t in tracks:
+        t["multiple"] = False
+    for i, a in enumerate(taken):
+        boxes = {b[0]: b for b in a["boxes"] if b[6]}
+        for other in taken[i + 1 :]:
+            shared = 0
+            for b in other["boxes"]:
+                c = boxes.get(b[0])
+                if c is not None and b[6]:
+                    gap_x = max(b[1] - c[3], c[1] - b[3])
+                    gap_y = max(b[2] - c[4], c[2] - b[4])
+                    shared += max(gap_x, gap_y) < 40
+            if shared >= min_shared:
+                a["multiple"] = other["multiple"] = True
+
+
 def contact_sheet(frames: Sequence[Image], busy: Sequence[int], path: Path, n: int = 8) -> None:
     """Save ``n`` key frames (preferring frames with hands) as a 4-column grid."""
     pool = list(busy) if len(busy) >= n else list(range(len(frames)))
@@ -281,7 +315,9 @@ def process_video(
         src_fps = 25.0
     out.parent.mkdir(parents=True, exist_ok=True)
     threshold = float(getattr(models.detector, "threshold", 0.2))
-    products = ByteSimpleTracker("product", high_score=threshold + 0.05)
+    products = ByteSimpleTracker(
+        "product", high_score=threshold + 0.05, max_missed=2, min_appearance=MIN_APPEARANCE
+    )
     hands = ByteSimpleTracker("hand", high_score=threshold, max_distance=1.5)
     writer: cv2.VideoWriter | None = None
     times: list[float] = []
@@ -290,6 +326,8 @@ def process_video(
     size = (0, 0)
     index = -1
     next_t = 0.0
+    rejected = 0
+    line = SHELF_LINE if order_id(video.stem) != video.stem else None  # *_camN fridge videos
     recent_heads: list[list[Detection]] = []
     start = time.perf_counter()
     try:
@@ -312,19 +350,38 @@ def process_video(
                 models.detector.start_session(image)
             dark = float(image.mean()) < DARK
             dets = [] if dark else models.detector.detect(image)
+            frame_area = float(size[0] * size[1])
+            dets = [d for d in dets if d.label != "hand" or d.area <= MAX_HAND_AREA * frame_area]
             prod_idx = [i for i, d in enumerate(dets) if d.label == "product"]
-            vectors = models.embedder.embed_batch(
+            # identification and the filter always see the original (never blurred) pixels
+            found = models.embedder.embed_batch(
                 [crop(image, (dets[i].x1, dets[i].y1, dets[i].x2, dets[i].y2)) for i in prod_idx]
             )
+            by_index = dict(zip(prod_idx, found, strict=True))
+            if models.product_filter is not None and line is not None:
+                # outside the door zone nothing is counted, so only that zone is filtered
+                zone = [i for i in prod_idx if dets[i].center[1] > line * size[1]]
+                if zone:
+                    probs = models.product_filter.predict(np.stack([by_index[i] for i in zone]))
+                    bad = {i for i, p in zip(zone, probs, strict=True) if p < PRODUCT_THRESHOLD}
+                    rejected += len(bad)
+                    keep = [i for i in range(len(dets)) if i not in bad]
+                    by_index = {
+                        new: by_index[old] for new, old in enumerate(keep) if old in by_index
+                    }
+                    dets = [dets[i] for i in keep]
             matches: list[Match | None] = [None] * len(dets)
-            for i, v in zip(prod_idx, vectors, strict=True):
+            vectors: list[Vector | None] = [None] * len(dets)
+            for i, v in by_index.items():
+                vectors[i] = v
                 matches[i] = models.index.query(v)
             frame_no = len(times)
             times.append(t)
-            assigned = products.update(frame_no, dets, matches)
+            assigned = products.update(frame_no, dets, matches, vectors)
             hand_assigned = hands.update(frame_no, dets)
             # faces are blurred in everything that is written to disk (not before detection)
-            shown = models.blurrer.blur(image) if models.blurrer and not dark else image
+            items = [(d.x1, d.y1, d.x2, d.y2) for d in dets if d.label == "product"]
+            shown = models.blurrer.blur(image, items) if models.blurrer and not dark else image
             recent_heads = [*recent_heads[-2:], [d for d in dets if d.label == "head"]]
             shown = blur_heads(shown, [h for frame in recent_heads for h in frame])
             drawn = annotate(shown, dets, {**assigned, **hand_assigned}, t)
@@ -345,8 +402,8 @@ def process_video(
     if not times:
         raise ValueError(f"no frames could be read from {video}")
     seconds = time.perf_counter() - start
-    line = SHELF_LINE if order_id(video.stem) != video.stem else None  # *_camN fridge videos
     tracks = summarise_tracks(products.tracks, hands.tracks, times, size, shelf_line=line)
+    flag_multiple(tracks)
     cart = count_items(tracks)
     sheet = out.with_name(out.stem + "_sheet.jpg")
     contact_sheet(thumbs, busy, sheet)
@@ -354,7 +411,17 @@ def process_video(
         str(video), str(out), str(sheet), tracks, dict(cart), len(times), round(seconds, 1),
         round(times[-1], 1),
     )  # fmt: skip
-    report = {**result.__dict__, "detector": models.name, "sample_fps": fps}
+    result.hands = [
+        [round(times[f], 2), round(d.x1), round(d.y1), round(d.x2), round(d.y2), round(d.score, 3)]
+        for h in hands.tracks
+        for f, d in zip(h.frames, h.dets, strict=True)
+    ]
+    report = {
+        **result.__dict__,
+        "detector": models.name,
+        "sample_fps": fps,
+        "rejected_detections": rejected,
+    }
     out.with_suffix(".json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     return result
 
@@ -385,6 +452,10 @@ def _parser(batch: bool) -> argparse.ArgumentParser:
         p.add_argument("--orders", type=Path, default=Path("data/orders.csv"))
         p.add_argument("--out", type=Path, default=Path("out"))
         p.add_argument("--limit", type=int, default=1000)
+        p.add_argument(
+            "--labels", type=Path, help="labels.json: real-crop gallery + product filter"
+        )
+        p.add_argument("--label-results", type=Path, default=Path("out/baseline"))
     else:
         p.add_argument("--video", type=Path, required=True)
         p.add_argument("--out", type=Path, required=True)
@@ -440,15 +511,30 @@ def batch(argv: Sequence[str] | None = None) -> int:
         return 1
     orders = read_orders(a.orders) if a.orders.exists() else {}
     models = _models(a)
+    real = None
+    if a.labels:
+        from hello_vision.datatools.real_crops import load_or_build
+
+        real = load_or_build(a.labels, a.label_results, a.videos, models.embedder, Path("models"))
+        print(f"labelled crops: {len(real)}; models for each order exclude that order", flush=True)
     scores: list[OrderScore] = []
     other: list[str] = []
     errors: list[str] = []
     frames = seconds = video_seconds = 0.0
     for n, (order, files) in enumerate(sorted(groups.items())[: a.limit], start=1):
         carts, seen, sheets = [], set[str](), []
+        several = False
+        order_models = models
+        if real is not None:  # leave-one-order-out: never train on the order being scored
+            order_models = replace(
+                models,
+                index=real.gallery(models.index, order),
+                product_filter=real.product_filter(order),
+            )
         try:
             for v in files:
-                r = process_video(v, a.out / f"{v.stem}.mp4", models, a.fps, a.max_seconds)
+                r = process_video(v, a.out / f"{v.stem}.mp4", order_models, a.fps, a.max_seconds)
+                several = several or any(t["multiple"] for t in r.tracks)
                 print(
                     f"[{n}/{len(groups)}] {v.stem}: {speed_line(r)} cart: {fmt(Counter(r.cart))}",
                     flush=True,
@@ -467,7 +553,7 @@ def batch(argv: Sequence[str] | None = None) -> int:
         cart = merge_cameras(carts)
         unknown = cart.pop("unknown", 0)
         if order in orders:
-            scores.append(OrderScore(order, cart, orders[order], seen, unknown))
+            scores.append(OrderScore(order, cart, orders[order], seen, unknown, several))
             (a.out / "summary.md").write_text(report(scores), encoding="utf-8")
         else:
             other.append(f"{order}: {fmt(cart)} (no order data)")

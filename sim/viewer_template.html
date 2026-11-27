@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>hello-vision viewer</title>
+<style>
+:root{color-scheme:dark;--bg:#393C45;--panel:#2e3138;--deep:#24262c;--line:#4b4f5a;--text:#eef0f3;--dim:#a9aeb9;--accent:#3ADC93;--pink:#ff5fc0;--orange:#ffa53d;--red:#ff6b6b;--yellow:#ffd24d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,sans-serif;height:100vh;display:flex;flex-direction:column}
+button,select,input,textarea{font:inherit;color:inherit;background:var(--deep);border:1px solid var(--line);border-radius:6px;padding:5px 10px}
+button{cursor:pointer}button:hover{border-color:var(--accent)}button.on{background:var(--accent);color:#10261b;border-color:var(--accent);font-weight:600}
+header{display:flex;flex-wrap:wrap;gap:18px;align-items:center;padding:10px 16px;background:var(--deep);border-bottom:2px solid var(--accent)}
+header h1{font-size:16px;margin:0;color:var(--accent)}
+.stat b{display:block;font-size:18px;font-variant-numeric:tabular-nums}.stat span{color:var(--dim);font-size:12px}
+.spacer{flex:1}
+.layout{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}
+aside{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px}
+aside input{width:100%;margin:8px 0}
+.filters{display:flex;gap:4px;flex-wrap:wrap}.filters button{padding:3px 8px;font-size:12px}
+.order{display:block;width:100%;text-align:left;margin-bottom:6px;background:var(--deep)}
+.order.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.order .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.badge.review{background:#ffd24d}
+.badge{font-size:11px;border-radius:99px;padding:1px 8px;color:#161616;font-weight:700;white-space:nowrap}
+.right{background:var(--accent)}.partly{background:var(--yellow)}.wrong{background:var(--red)}.nodata{background:#9aa0aa}
+.thumbs{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}.thumb{position:relative}.thumb img{width:34px;height:34px;object-fit:contain;background:#fff;border-radius:4px;display:block}
+.thumb em{position:absolute;right:-3px;bottom:-3px;font-style:normal;font-size:10px;background:var(--deep);border-radius:99px;padding:0 4px}
+main{overflow:auto;padding:12px 16px;min-width:0}
+.cams{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:10px}
+.cam{background:#000;border-radius:8px;overflow:hidden;position:relative}
+.cam.single{max-width:420px}
+.cam video{width:100%;display:block}.cam canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.cam .tag{position:absolute;left:8px;bottom:8px;background:#000a;border-radius:4px;padding:1px 8px;font-size:12px;pointer-events:none}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.bar input[type=range]{flex:1;min-width:180px;accent-color:var(--accent);padding:0}
+.bar label{display:flex;gap:4px;align-items:center;color:var(--dim)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.card h2{font-size:13px;margin:0 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+#timeline{max-height:300px;overflow:auto}
+.tl-row{display:grid;grid-template-columns:190px 1fr;gap:8px;align-items:center;height:20px}
+.tl-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--dim)}
+.tl-track{position:relative;height:14px;background:var(--deep);border-radius:3px}
+.tl-bar{position:absolute;top:0;bottom:0;border-radius:3px;cursor:pointer;min-width:6px;font-size:11px;color:#111;line-height:14px;padding-left:2px;overflow:hidden;border:0}
+.tl-bar.sel{outline:2px solid #fff}
+.playhead{position:absolute;top:0;bottom:0;width:1px;background:#fff;pointer-events:none}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.item{display:flex;gap:10px;align-items:center;margin-bottom:6px}.item img{width:48px;height:48px;object-fit:contain;background:#fff;border-radius:6px}
+.ok{color:var(--accent)}.bad{color:var(--red)}.miss{color:var(--yellow)}.mark{font-size:20px;width:22px;text-align:center}
+.inspect{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}.inspect>img{max-width:320px;max-height:260px;border-radius:8px;background:#000}
+.match{text-align:center;width:130px}.match img{width:110px;height:110px;object-fit:contain;background:#fff;border-radius:8px}
+.match.chosen img{outline:3px solid var(--accent)}
+textarea{width:100%;min-height:70px;resize:vertical}
+.note{color:var(--dim);font-size:12px}.warn{color:var(--yellow)}
+table{border-collapse:collapse}th,td{border:1px solid var(--line);padding:4px;text-align:center;min-width:54px;height:46px}
+th img{width:40px;height:40px;object-fit:contain;background:#fff;border-radius:4px;display:block;margin:auto}th{font-size:10px;font-weight:500;max-width:80px;overflow-wrap:anywhere}
+td.hit{cursor:pointer;font-weight:700}
+.grid-wrap{overflow:auto}
+.hidden{display:none!important}
+@media (max-width:900px){.layout{grid-template-columns:1fr;overflow:auto}aside{max-height:240px;border-right:0;border-bottom:1px solid var(--line)}main{overflow:visible}body{height:auto}.tl-row{grid-template-columns:110px 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>hello-vision viewer</h1>
+  <div id="stats" style="display:flex;gap:22px;flex-wrap:wrap"></div>
+  <div class="spacer"></div>
+  <div id="detectors"></div>
+  <div><button id="tab-orders" class="on">Orders</button> <button id="tab-confusion">Confusion</button> <button id="tab-mistakes">Mistakes</button></div>
+</header>
+<div class="layout">
+  <aside>
+    <div class="filters" id="filters"></div>
+    <input id="search" placeholder="Search product or order…" aria-label="search">
+    <div id="list"></div>
+  </aside>
+  <main>
+    <div id="view-orders">
+      <div class="note" id="runnote"></div>
+      <div class="cams" id="cams"></div>
+      <div class="bar">
+        <button id="play">▶ Play</button>
+        <button id="back" title="previous frame (←)">◀ frame</button>
+        <button id="fwd" title="next frame (→)">frame ▶</button>
+        <span id="speeds"></span>
+        <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="scrubber">
+        <span id="clock" style="font-variant-numeric:tabular-nums"></span>
+      </div>
+      <div class="bar" id="layers"></div>
+      <div class="note">Boxes are shown at the processed moments (5 per second). Dashed line: a product held by a hand BELOW it in at least two moments is counted as taken.</div>
+      <div class="card"><h2>Timeline <label class="note"><input type="checkbox" id="alltracks"> show shelf / untouched tracks too</label></h2><div id="timeline"></div></div>
+      <div class="two">
+        <div class="card"><h2>Model thinks</h2><div id="predicted"></div></div>
+        <div class="card"><h2>Actually bought (orders.csv)</h2><div id="actual"></div></div>
+      </div>
+      <div class="card"><h2>Track inspector</h2><div id="inspector"></div></div>
+      <div class="card"><h2>My notes for this order</h2><textarea id="notes" placeholder="What do you see?"></textarea><div class="note" id="notestate"></div></div>
+    </div>
+    <div id="view-mistakes" class="hidden">
+      <div class="card"><h2>Examples of remaining mistakes</h2><p class="note">Click “open” to jump to the order and track.</p><div id="mistakes"></div></div>
+    </div>
+    <div id="view-confusion" class="hidden">
+      <div class="card"><h2>True product (rows) × predicted product (columns)</h2>
+        <p class="note">Diagonal = correct items. Off-diagonal = an order missed the row product and wrongly predicted the column product (when an order has several errors, every missed item is paired with every wrong one, so this is an upper bound). “nothing” = missed with no wrong item.</p>
+        <div class="grid-wrap" id="grid"></div></div>
+      <div class="card"><h2>Orders in the selected cell</h2><div id="cellorders" class="note">Click a cell.</div></div>
+    </div>
+  </main>
+</div>
+<script>
+"use strict";
+const D = __DATA__;
+const $ = id => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (k === "style") n.style.cssText = v;
+    else n.setAttribute(k, v === true ? "" : v);
+  }
+  n.append(...kids.filter(k => k !== null && k !== undefined));
+  return n;
+}
+const runKeys = [...new Set([...(D.order || []), ...Object.keys(D.runs)])];
+const S = {run: runKeys[0], order: null, filter: "all", query: "", rate: 1, track: null, videos: [],
+  layers: {products: true, hands: true, ids: true, taken: true, zones: true}};
+const run = () => D.runs[S.run];
+const thumb = (sku, qty) => el("span", {class: "thumb", title: sku},
+  el("img", {src: "thumbs/" + sku + ".jpg", alt: sku}), qty > 1 ? el("em", {}, "×" + qty) : null);
+const skuColour = sku => {
+  if (!sku) return "#ffa53d";
+  let h = 0; for (const c of sku) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return `hsl(${h} 70% 65%)`;
+};
+const pct = (a, b) => b ? (100 * a / b).toFixed(1) + "%" : "–";
+
+function renderStats() {
+  const s = run().summary;
+  const stat = (v, label) => el("div", {class: "stat"}, el("b", {}, v), el("span", {}, label));
+  $("stats").replaceChildren(
+    stat(`${s.exact} / ${s.orders}`, "exact carts (" + pct(s.exact, s.orders) + ")"),
+    stat(pct(s.correct, s.actual), `item recall (${s.correct}/${s.actual})`),
+    stat(pct(s.correct, s.correct + s.wrong), "item precision"),
+    stat(String(s.missed), "missed items"),
+    stat(String(s.wrong), "wrong items"),
+    s.review === undefined ? stat(String(s.fps), "processed fps") : stat(String(s.review), "sent to review"));
+  $("detectors").replaceChildren(...(runKeys.length > 1 ? runKeys.map(k => el("button",
+    {class: k === S.run ? "on" : "", onclick: () => { S.run = k; S.track = null; renderAll(); }},
+    `${D.runs[k].name} (${s_orders(k)} orders)`)) : []));
+}
+const s_orders = k => D.runs[k].summary.orders;
+
+function visibleOrders() {
+  const q = S.query.toLowerCase();
+  return D.orders.filter(o => {
+    const v = run().orders[o.id];
+    if (!v) return false;
+    if (S.filter !== "all" && v.status !== S.filter) return false;
+    if (!q) return true;
+    return [o.id, o.fridge, ...Object.keys(o.actual || {}), ...Object.keys(v.predicted)].some(x => x.toLowerCase().includes(q));
+  });
+}
+function renderList() {
+  const names = {all: "all", right: "right", partly: "partly", wrong: "wrong"};
+  if (run().summary.review) names.review = "review";
+  $("filters").replaceChildren(...Object.entries(names).map(([k, label]) => el("button",
+    {class: S.filter === k ? "on" : "", onclick: () => { S.filter = k; renderList(); }}, label)));
+  const list = visibleOrders();
+  $("list").replaceChildren(...list.map(o => {
+    const v = run().orders[o.id];
+    const label = {right: "right", partly: "partly", wrong: "wrong", review: "review", nodata: "no data"}[v.status];
+    return el("button", {class: "order" + (o.id === S.order ? " sel" : ""), onclick: () => select(o.id)},
+      el("div", {class: "row"}, el("b", {}, o.id), el("span", {class: "badge " + v.status}, label)),
+      (run().flagged || []).includes(o.id) ? el("div", {class: "warn note"}, "⚠ multiple items held: check quantity") : null,
+      el("div", {class: "note"}, o.fridge ? "fridge " + o.fridge : "no fridge key"),
+      el("div", {class: "thumbs"}, ...Object.entries(o.actual || {}).map(([s, n]) => thumb(s, n))));
+  }));
+  if (!list.length) $("list").append(el("p", {class: "note"}, "No orders match."));
+}
+const current = () => D.orders.find(o => o.id === S.order);
+
+function select(id) {
+  pause(); S.order = id; S.track = null;
+  renderList(); renderOrder();
+}
+
+function renderOrder() {
+  const o = current(); if (!o) return;
+  const r = run();
+  const notes = r.note ? [r.note] : [];
+  if (!r.boxes) notes.push("This older run saved no per-frame boxes and used earlier rules: carts are shown, overlays and crops are not available.");
+  if (!r.note && r.boxes && o.videos.some(v => r.videos[v.stem] && !r.videos[v.stem].hands)) notes.push("Hand boxes are not available for this order yet.");
+  if (o.videos.some(v => !r.videos[v.stem])) notes.push("Some camera videos have no result in this run.");
+  $("runnote").className = notes.length ? "note warn" : "note";
+  $("runnote").textContent = notes.join(" ");
+  S.videos = o.videos.map(info => {
+    const video = el("video", {src: info.src, preload: "auto", muted: true, playsinline: true});
+    video.muted = true;
+    const canvas = el("canvas", {width: info.w, height: info.h});
+    canvas.addEventListener("click", e => pickBox(e, canvas, info.stem));
+    video.addEventListener("error", () => { $("runnote").className = "note warn"; $("runnote").textContent = "A video could not be loaded: " + info.src; });
+    const tag = info.stem.includes("_cam") ? info.stem.split("_").pop() : info.stem;
+    const box = el("div", {class: "cam" + (info.h > info.w ? " single" : "")}, video, canvas, el("div", {class: "tag"}, tag));
+    return {info, video, canvas, box};
+  });
+  $("cams").replaceChildren(...S.videos.map(v => v.box));
+  S.videos.forEach(v => v.video.playbackRate = S.rate);
+  renderCarts(); renderTimeline(); renderInspector(); loadNotes();
+}
+
+const duration = () => Math.max(...S.videos.map(v => v.info.duration), 0.1);
+const now = () => S.videos.length ? master().video.currentTime : 0;
+const master = () => S.videos.reduce((a, b) => b.info.duration > a.info.duration ? b : a);
+function seek(t) {
+  t = Math.max(0, Math.min(duration(), t));
+  S.videos.forEach(v => { v.video.currentTime = Math.min(t, v.info.duration - 0.001); });
+}
+function pause() { S.videos.forEach(v => v.video.pause()); $("play").textContent = "▶ Play"; }
+function toggle() {
+  if (!S.videos.length) return;
+  if (master().video.paused) {
+    if (now() >= duration() - 0.1) seek(0);
+    S.videos.forEach(v => { v.video.playbackRate = S.rate; if (v.video.currentTime < v.info.duration - 0.05) v.video.play().catch(() => {}); });
+    $("play").textContent = "❚❚ Pause";
+  } else pause();
+}
+function step(dir) { pause(); const f = master().info.fps || 20; seek((Math.round(now() * f) + dir) / f + 0.0001); }
+
+function sampleAt(boxes, t) {
+  let best = null;
+  for (const b of boxes) if (b[0] <= t + 0.03 && t - b[0] < 0.23 && (!best || b[0] > best[0])) best = b;
+  return best;
+}
+function draw() {
+  for (const v of S.videos) {
+    const g = v.canvas.getContext("2d"), W = v.info.w, H = v.info.h, t = v.video.currentTime;
+    g.clearRect(0, 0, W, H);
+    const k = Math.max(1, W / 700);
+    g.font = `${Math.round(13 * k)}px system-ui`; g.textBaseline = "bottom";
+    const data = run().videos[v.info.stem];
+    if (S.layers.zones && v.info.stem.includes("_cam")) {
+      const y = D.shelfLine * H;
+      g.save(); g.setLineDash([10 * k, 6 * k]); g.strokeStyle = "#3ADC93"; g.lineWidth = 1.5 * k;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); g.restore();
+      label(g, "taken zone ↓", 4 * k, y + 20 * k, "#3ADC93");
+    }
+    if (!data) continue;
+    if (S.layers.hands && data.hands) for (const h of data.hands) {
+      if (!(h[0] <= t + 0.03 && t - h[0] < 0.19)) continue;
+      g.strokeStyle = "#ff5fc0"; g.lineWidth = 2 * k; g.strokeRect(h[1], h[2], h[3] - h[1], h[4] - h[2]);
+      label(g, "hand " + h[5].toFixed(2), h[1], h[2], "#ff5fc0");
+    }
+    if (!S.layers.products) continue;
+    for (const tr of data.tracks) {
+      const b = tr.boxes && sampleAt(tr.boxes, t); if (!b) continue;
+      const colour = tr.sku ? "#3ADC93" : "#ffa53d";
+      const selected = S.track && S.track.stem === v.info.stem && S.track.id === tr.track_id;
+      g.strokeStyle = colour;
+      g.lineWidth = (S.layers.taken && tr.taken_guess ? 6 : 2) * k;
+      g.strokeRect(b[1], b[2], b[3] - b[1], b[4] - b[2]);
+      if (selected) { g.strokeStyle = "#fff"; g.lineWidth = 2 * k; g.strokeRect(b[1] - 6 * k, b[2] - 6 * k, b[3] - b[1] + 12 * k, b[4] - b[2] + 12 * k); }
+      const name = tr.sku ? `${tr.sku} ${tr.confidence.toFixed(2)}` : "unknown" + (tr.best_guess ? ` (${tr.best_guess}?)` : "");
+      const parts = [S.layers.ids ? "#" + tr.track_id : "", name, S.layers.taken && tr.taken_guess ? "✓ taken" : ""];
+      label(g, parts.filter(Boolean).join(" "), b[1], b[2], colour);
+    }
+  }
+}
+function label(g, text, x, y, colour) {
+  const m = g.measureText(text), h = parseInt(g.font, 10) + 5;
+  y = Math.max(h, y); x = Math.max(0, Math.min(x, g.canvas.width - m.width - 8));
+  g.fillStyle = "rgba(0,0,0,.72)"; g.fillRect(x, y - h, m.width + 8, h);
+  g.fillStyle = colour; g.fillText(text, x + 4, y - 2);
+}
+function pickBox(e, canvas, stem) {
+  const r = canvas.getBoundingClientRect(), x = (e.clientX - r.left) * canvas.width / r.width, y = (e.clientY - r.top) * canvas.height / r.height;
+  const data = run().videos[stem]; if (!data) return;
+  const v = S.videos.find(v => v.info.stem === stem);
+  let best = null, area = Infinity;
+  for (const tr of data.tracks) {
+    const b = tr.boxes && sampleAt(tr.boxes, v.video.currentTime);
+    if (b && x >= b[1] && x <= b[3] && y >= b[2] && y <= b[4]) { const a = (b[3] - b[1]) * (b[4] - b[2]); if (a < area) { best = tr; area = a; } }
+  }
+  if (best) choose(stem, best, false);
+}
+function choose(stem, tr, jump) {
+  S.track = {stem, id: tr.track_id};
+  if (jump) { pause(); seek((tr.best ? tr.best[0] : tr.first_seen_s) + 0.001); }
+  renderTimeline(); renderInspector();
+}
+
+function renderTimeline() {
+  const all = $("alltracks").checked, rows = [], T = duration();
+  for (const v of S.videos) {
+    const data = run().videos[v.info.stem]; if (!data) continue;
+    const tracks = data.tracks.filter(t => all || t.hand_touched || t.taken_guess || (S.track && S.track.stem === v.info.stem && S.track.id === t.track_id))
+      .sort((a, b) => a.first_seen_s - b.first_seen_s);
+    const cam = v.info.stem.includes("_cam") ? v.info.stem.split("_").pop() : "video";
+    rows.push(el("div", {class: "note", style: "margin-top:6px"}, `${cam}: ${tracks.length} of ${data.tracks.length} tracks`));
+    for (const t of tracks) {
+      const sel = S.track && S.track.stem === v.info.stem && S.track.id === t.track_id;
+      const left = 100 * t.first_seen_s / T, width = Math.max(0.6, 100 * (t.last_seen_s - t.first_seen_s) / T);
+      rows.push(el("div", {class: "tl-row"},
+        el("div", {class: "tl-name", title: t.sku || "unknown"}, `#${t.track_id} ${t.sku || "unknown"}`),
+        el("div", {class: "tl-track"},
+          el("button", {class: "tl-bar" + (sel ? " sel" : ""), style: `left:${left}%;width:${width}%;background:${skuColour(t.sku)}`,
+            title: `${t.first_seen_s}s – ${t.last_seen_s}s${t.hand_touched ? " · touched by a hand" : ""}${t.taken_guess ? " · taken" : ""}`,
+            onclick: () => choose(v.info.stem, t, true)}, (t.taken_guess ? "✓" : "") + (t.hand_touched ? "✋" : "")),
+          el("div", {class: "playhead"}))));
+    }
+  }
+  $("timeline").replaceChildren(...rows);
+}
+
+function renderCarts() {
+  const o = current(), v = run().orders[o.id];
+  if (!v) { $("predicted").replaceChildren("No result in this run."); $("actual").replaceChildren(); return; }
+  const actual = v.actual || o.actual, pred = v.predicted;
+  const row = (sku, qty, cls, mark, text) => el("div", {class: "item"}, el("span", {class: "mark " + cls}, mark),
+    el("img", {src: "thumbs/" + sku + ".jpg", alt: ""}), el("div", {}, el("b", {}, sku), el("div", {class: cls}, `${text} ×${qty}`)));
+  const left = [], right = [];
+  for (const [s, n] of Object.entries(pred)) {
+    if (!actual) { left.push(row(s, n, "note", "·", "predicted")); continue; }
+    const ok = Math.min(n, actual[s] || 0);
+    if (ok) left.push(row(s, ok, "ok", "✓", "correct"));
+    if (n > ok) left.push(row(s, n - ok, "bad", "✗", "wrong"));
+  }
+  if (!left.length) left.push(el("p", {class: v.status === "review" ? "miss" : "note"}, v.status === "review" ? "Sent to review: nothing charged." : "Nothing."));
+  const probs = Object.entries(v.probabilities || {}).sort((a, b) => b[1] - a[1]);
+  if (probs.length) left.push(el("p", {class: "note"}, "Probabilities: " + probs.map(([s, p]) => `${s} ${p}`).join(" · ")));
+  if (v.unknown) left.push(el("p", {class: "miss"}, `+ ${v.unknown} held item(s) it could not identify (not counted)`));
+  if (!actual) right.push(el("p", {class: "note"}, "No order data for this video."));
+  else for (const [s, n] of Object.entries(actual)) {
+    const ok = Math.min(n, pred[s] || 0);
+    if (ok) right.push(row(s, ok, "ok", "✓", "found"));
+    if (n > ok) right.push(row(s, n - ok, "miss", "○", "missed"));
+  }
+  $("predicted").replaceChildren(...left); $("actual").replaceChildren(...right);
+}
+
+function renderInspector() {
+  const box = $("inspector");
+  const data = S.track && run().videos[S.track.stem];
+  const t = data && data.tracks.find(x => x.track_id === S.track.id);
+  if (!t) { box.replaceChildren(el("p", {class: "note"}, "Click a timeline bar or a box on a video.")); return; }
+  const o = current();
+  if (t.attention !== undefined) {
+    box.replaceChildren(el("b", {}, `${S.track.stem} · ${t.sku}`),
+      el("div", {class: "note"}, `At ${t.first_seen_s}s. Probability for the whole order ${t.confidence}; weight of this frame ${t.attention}.`));
+    return;
+  }
+  const head = el("div", {},
+    el("b", {}, `${S.track.stem} · track #${t.track_id} → ${t.sku || "unknown"}`),
+    el("div", {class: "note"}, `${t.multiple ? "HELD WITH ANOTHER ITEM · " : ""}${t.frames} frames, ${t.first_seen_s}s–${t.last_seen_s}s · ${t.hand_touched ? "touched by a hand" : "never touched"} · ${t.taken_guess ? "counted as taken" : "not counted"} · confidence ${t.confidence}`),
+    el("div", {class: "note"}, t.sku ? "The name is a score-weighted vote over all frames of this track." :
+      `Unknown: in most frames the best similarity was below ${D.idThreshold} or too close to the runner-up (margin ${D.idMargin}). Closest by vote: ${t.best_guess || "none"}.`));
+  const crop = t.crop ? el("img", {src: t.crop, alt: "best crop of the track"}) : el("p", {class: "note"}, "No crop saved.");
+  const matches = el("div", {class: "inspect"}, ...(t.top || []).map(([sku, score], i) => el("div", {class: "match" + (sku === t.sku ? " chosen" : "")},
+    el("img", {src: "thumbs/" + sku + ".jpg", alt: sku}), el("div", {}, `${i + 1}. ${sku}`), el("div", {class: "note"}, "similarity " + score.toFixed(3)),
+    o.actual && o.actual[sku] ? el("div", {class: "ok"}, "bought in this order") : null)));
+  box.replaceChildren(head, el("div", {class: "inspect", style: "margin-top:10px"}, crop, el("div", {},
+    el("div", {class: "note"}, "Top-3 gallery matches for THIS ONE crop (the track vote can differ):"), t.top ? matches : el("p", {class: "note"}, "Not computed."))));
+}
+
+const noteKey = () => "hv-note-" + S.order;
+function loadNotes() {
+  let v = ""; try { v = localStorage.getItem(noteKey()) || ""; $("notestate").textContent = ""; }
+  catch (e) { $("notestate").textContent = "Notes cannot be saved in this browser."; }
+  $("notes").value = v;
+}
+$("notes").addEventListener("input", () => {
+  try { localStorage.setItem(noteKey(), $("notes").value); $("notestate").textContent = "saved in this browser"; }
+  catch (e) { $("notestate").textContent = "Notes cannot be saved in this browser."; }
+});
+
+function renderConfusion() {
+  const cells = run().summary.confusion;
+  const keys = Object.keys(cells).map(k => k.split("|"));
+  const truths = [...new Set(keys.map(k => k[0]))].sort();
+  const preds = [...new Set(keys.map(k => k[1]).filter(Boolean))].sort(); preds.push("");
+  const head = s => el("th", {}, s ? el("img", {src: "thumbs/" + s + ".jpg", alt: ""}) : null, s || "nothing");
+  const max = Math.max(1, ...Object.values(cells).map(c => c.n));
+  $("grid").replaceChildren(el("table", {},
+    el("tr", {}, el("th", {}, "true ↓  predicted →"), ...preds.map(head)),
+    ...truths.map(t => el("tr", {}, head(t), ...preds.map(p => {
+      const c = cells[t + "|" + p];
+      if (!c) return el("td", {style: p === t ? "background:#ffffff0d" : ""});
+      const rgb = p === t ? "58,220,147" : p ? "255,107,107" : "255,210,77";
+      return el("td", {class: "hit", style: `background:rgba(${rgb},${0.25 + 0.6 * c.n / max})`, title: `${t} → ${p || "nothing"}`,
+        onclick: () => $("cellorders").replaceChildren(el("p", {}, `${t} → ${p || "nothing"}: ${c.n}`),
+          ...[...new Set(c.orders)].map(id => el("button", {style: "margin:0 6px 6px 0", onclick: () => { tab("orders"); select(id); }}, id)))}, String(c.n));
+    })))));
+  $("cellorders").textContent = "Click a cell.";
+}
+function tab(name) {
+  for (const n of ["orders", "confusion", "mistakes"]) { $("view-" + n).classList.toggle("hidden", n !== name); $("tab-" + n).classList.toggle("on", n === name); }
+  if (name !== "orders") pause();
+}
+
+function renderAll() {
+  renderStats();
+  if (!run().orders[S.order]) S.order = (D.orders.find(o => run().orders[o.id]) || {}).id;
+  renderList(); renderOrder(); renderConfusion(); renderMistakes();
+}
+function renderMistakes() {
+  const list = run().mistakes || [];
+  $("mistakes").replaceChildren(...list.map((m, i) => {
+    const data = m.stem && run().videos[m.stem];
+    const t = data && data.tracks.find(x => x.track_id === m.track);
+    return el("div", {class: "item", style: "border-bottom:1px solid var(--line);padding-bottom:8px"},
+      el("b", {style: "width:26px"}, String(i + 1)),
+      el("img", {src: "thumbs/" + m.sku + ".jpg", alt: m.sku}),
+      t && t.crop ? el("img", {src: t.crop, alt: "crop", style: "width:90px;height:90px;background:#000"}) : null,
+      el("div", {style: "flex:1"}, el("b", {class: m.kind === "wrong" ? "bad" : "miss"}, `${m.kind}: ${m.sku}`),
+        el("div", {class: "note"}, `${m.order}${m.stem ? " · " + m.stem.split("_").pop() + " track #" + m.track : ""}`), el("div", {}, m.why)),
+      el("button", {onclick: () => { tab("orders"); select(m.order); if (t) choose(m.stem, t, true); window.scrollTo(0, 0); document.querySelector("main").scrollTop = 0; }}, "open"));
+  }));
+  if (!list.length) $("mistakes").append(el("p", {class: "note"}, "Not available for this run."));
+}
+$("tab-orders").onclick = () => tab("orders");
+$("tab-confusion").onclick = () => tab("confusion");
+$("tab-mistakes").onclick = () => tab("mistakes");
+$("search").oninput = e => { S.query = e.target.value; renderList(); };
+$("play").onclick = toggle; $("back").onclick = () => step(-1); $("fwd").onclick = () => step(1);
+$("scrub").oninput = e => { pause(); seek(duration() * e.target.value / 1000); };
+$("alltracks").onchange = renderTimeline;
+const speedButtons = () => $("speeds").replaceChildren(...[0.25, 0.5, 1, 2].map(r => el("button", {class: r === S.rate ? "on" : "",
+  onclick: () => { S.rate = r; S.videos.forEach(v => v.video.playbackRate = r); speedButtons(); }}, r + "×")));
+speedButtons();
+$("layers").replaceChildren(el("span", {class: "note"}, "Show:"), ...Object.entries({products: "products", hands: "hands", ids: "track IDs", taken: "highlight taken", zones: "zone line"})
+  .map(([k, name]) => el("label", {}, el("input", {type: "checkbox", checked: true, onchange: e => { S.layers[k] = e.target.checked; }}), name)));
+document.addEventListener("keydown", e => {
+  if (e.target instanceof Element && e.target.matches("textarea, input:not([type=checkbox]):not([type=range])")) return;
+  if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+  else if (e.key === " " && e.target.tagName !== "BUTTON") { e.preventDefault(); toggle(); }
+});
+function tick() {
+  if (S.videos.length) {
+    const m = master(), t = m.video.currentTime;
+    if (!m.video.paused) for (const v of S.videos) if (v !== m && t < v.info.duration - 0.1 && Math.abs(v.video.currentTime - t) > 0.12) v.video.currentTime = t;
+    if (m.video.ended) $("play").textContent = "▶ Play";
+    draw();
+    if (document.activeElement !== $("scrub")) $("scrub").value = Math.round(1000 * t / duration());
+    $("clock").textContent = `${t.toFixed(2)} / ${duration().toFixed(1)} s`;
+    for (const p of document.querySelectorAll(".playhead")) p.style.left = (100 * t / duration()) + "%";
+  }
+  requestAnimationFrame(tick);
+}
+S.order = (D.orders[0] || {}).id;
+renderAll(); tick();
+</script>
+</body>
+</html>

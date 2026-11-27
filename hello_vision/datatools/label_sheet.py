@@ -45,6 +45,9 @@ small{color:#aab}
 </style></head><body>
 <header><b id="count"></b><button id="next">Next unlabelled</button>
 <button id="dl">Download labels.json</button>
+<button id="imp">Import labels.json</button><input id="file" type="file" accept=".json,application/json" hidden>
+<select id="show" aria-label="filter"><option value="all">show all</option><option value="todo">unlabelled</option><option value="__unsure__">unsure</option><option value="__not_product__">not a product</option><option value="product">products</option></select>
+<small id="msg"></small>
 <small>Click a crop to exclude it (bad / wrong object). Pick "Not a product" for hands, phones, shelf clutter.</small></header>
 <main id="main"></main>
 <script>
@@ -74,6 +77,27 @@ for(const t of D.tasks){
  const v=S.labels[t.id];if(v&&v!==NP&&v!==UN&&!(v in t.order_items)){for(const s of D.skus)if(!(s in t.order_items))all.append(skuButton(t,s));all.classList.add("show")}
  paint(t)}
 count();
+function addOther(t){const c=cards[D.tasks.indexOf(t)],all=c.querySelector(".all"),v=S.labels[t.id];
+ if(v&&v!==NP&&v!==UN&&!(v in t.order_items)){if(!all.childElementCount)for(const s of D.skus)if(!(s in t.order_items))all.append(skuButton(t,s));all.classList.add("show")}}
+function refresh(){for(const t of D.tasks){addOther(t);paint(t)}
+ document.querySelectorAll(".crops img").forEach(i=>i.classList.toggle("off",!!S.excluded[i.getAttribute("src")]));count();filter()}
+function filter(){const f=document.getElementById("show").value;D.tasks.forEach((t,i)=>{const v=S.labels[t.id];
+ cards[i].hidden=!(f==="all"||(f==="todo"&&!v)||v===f||(f==="product"&&v&&v!==NP&&v!==UN))})}
+document.getElementById("show").onchange=filter;
+const file=document.getElementById("file"),msg=document.getElementById("msg");
+document.getElementById("imp").onclick=()=>{file.value="";file.click()};
+file.onchange=async()=>{if(!file.files.length)return;
+ try{const data=JSON.parse(await file.files[0].text());
+  if(!data||typeof data.labels!=="object")throw new Error("no labels in this file");
+  const ids=new Set(D.tasks.map(t=>t.id)),ok=new Set([NP,UN,...D.skus]);
+  const good=Object.entries(data.labels).filter(([k,v])=>ids.has(k)&&ok.has(v));
+  if(!good.length)throw new Error("none of its items are on this sheet");
+  if(Object.keys(S.labels).length&&!confirm(`Replace the labels of ${good.length} items with the file's?`))return;
+  for(const[k,v]of good)S.labels[k]=v;
+  S.excluded=Object.fromEntries((data.excluded||[]).map(s=>[s,1]));save();refresh();
+  const skipped=Object.keys(data.labels).length-good.length;
+  msg.textContent=`imported ${good.length} labels`+(skipped?`, skipped ${skipped} unknown`:"")+(data.sheet&&data.sheet!==D.id?" (file is from a different sheet)":"")+(data.labelled_by?` · source: ${data.labelled_by}`:"");
+ }catch(e){msg.textContent="could not import: "+e.message}};
 document.getElementById("next").onclick=()=>{const i=D.tasks.findIndex(t=>!S.labels[t.id]);if(i>=0)cards[i].scrollIntoView({behavior:"smooth",block:"center"})};
 document.getElementById("dl").onclick=()=>{const out={sheet:D.id,labels:S.labels,excluded:Object.keys(S.excluded)};
  const a=el("a",{href:URL.createObjectURL(new Blob([JSON.stringify(out,null,1)],{type:"application/json"})),download:"labels.json"});document.body.append(a);a.click();a.remove()};

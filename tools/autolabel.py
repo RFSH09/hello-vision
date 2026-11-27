@@ -138,7 +138,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         y2=d.y2,
                     )
                 )
-            shown = models.blurrer.blur(image) if models.blurrer else image
+            items = [(d.x1, d.y1, d.x2, d.y2) for d in dets if d.label == "product"]
+            shown = models.blurrer.blur(image, items) if models.blurrer else image
             shown = blur_heads(shown, [d for d in dets if d.label == "head"])
             file_name = f"{name}_{index:05d}.jpg"
             bgr_out = cv2.cvtColor(shown, cv2.COLOR_RGB2BGR)

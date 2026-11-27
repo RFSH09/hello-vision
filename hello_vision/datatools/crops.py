@@ -70,6 +70,7 @@ def track_candidates(
     shelf_line: float = 0.45,
     prepare: Callable[[Image], Image] | None = None,
     max_area: float = 0.08,
+    pad: float = 0.08,
 ) -> dict[int, list[Candidate]]:
     """Cut every held-outside box of the usable tracks out of ``video`` (one sequential pass).
 
@@ -81,6 +82,8 @@ def track_candidates(
         prepare: Applied to each used frame before cropping (e.g. face blurring).
         max_area: Boxes larger than this fraction of the frame are ignored (a held product is
             small; the huge boxes cover arms or the whole area outside the door).
+
+        pad: Relative margin added around each box.
 
     Returns:
         Track id -> candidates.
@@ -116,7 +119,7 @@ def track_candidates(
             if prepare:
                 frame = prepare(frame)
             for track_id, r in wanted.pop(key):
-                crop = pad_crop(frame, r[1:5])
+                crop = pad_crop(frame, r[1:5], pad)
                 out.setdefault(track_id, []).append(Candidate(r[0], crop, quality(crop)))
     finally:
         cap.release()

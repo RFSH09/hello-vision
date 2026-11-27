@@ -57,6 +57,18 @@ class YuNetFaceDetector:
         return [(int(f[0]), int(f[1]), int(f[2]), int(f[3])) for f in faces]
 
 
+def _mostly_inside(
+    face: Box, regions: Sequence[tuple[float, float, float, float]], share: float = 0.6
+) -> bool:
+    x, y, w, h = face
+    for x1, y1, x2, y2 in regions:
+        ix = max(0.0, min(x + w, x2) - max(x, x1))
+        iy = max(0.0, min(y + h, y2) - max(y, y1))
+        if w * h > 0 and ix * iy / (w * h) >= share:
+            return True
+    return False
+
+
 @dataclass
 class FaceBlurrer:
     """Blurs detected faces and fixed regions.
@@ -71,8 +83,19 @@ class FaceBlurrer:
     fixed_regions: Sequence[tuple[float, float, float, float]] = field(default_factory=tuple)
     margin: float = 0.4
 
-    def blur(self, image: Image) -> Image:
-        """Return a copy of ``image`` with faces and fixed regions irreversibly blurred."""
+    def blur(
+        self, image: Image, protect: Sequence[tuple[float, float, float, float]] = ()
+    ) -> Image:
+        """Return a copy of ``image`` with faces and fixed regions irreversibly blurred.
+
+        Only ever apply this to media that is saved or displayed, never before detection.
+
+        Args:
+            image: RGB frame.
+            protect: ``(x1, y1, x2, y2)`` product boxes. A detected "face" lying mostly inside
+                one is treated as a false alarm on packaging and left sharp. Fixed regions
+                are always blurred.
+        """
         out = image.copy()
         h, w = out.shape[:2]
         boxes: list[Box] = [
@@ -80,7 +103,7 @@ class FaceBlurrer:
             for x1, y1, x2, y2 in self.fixed_regions
         ]
         if self.detector is not None:
-            boxes += self.detector.detect(image)
+            boxes += [b for b in self.detector.detect(image) if not _mostly_inside(b, protect)]
         for x, y, bw, bh in boxes:
             dx, dy = int(bw * self.margin), int(bh * self.margin)
             x1, y1 = max(0, x - dx), max(0, y - dy)
