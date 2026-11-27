@@ -200,7 +200,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=5000)
     p.add_argument("--min-free-gb", type=float, default=13.0)
     p.add_argument("--poll", type=float, default=600.0)
+    p.add_argument("--val-from", help="split by date only: first validation day")
+    p.add_argument("--test-from", help="split by date only: first test day")
     a = p.parse_args(argv)
+    by_date = (
+        ["--val-from", a.val_from, "--test-from", a.test_from] if a.val_from and a.test_from else []
+    )
 
     keep_awake()
     note(a.progress, f"waiting for {a.export.name}")
@@ -225,7 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     for step in (
         ["import-export", "--csv", str(a.export), "--names", str(a.names), "--records",
          str(records), "--skip-unknown"],
-        ["split", "--records", str(records)],
+        ["split", "--records", str(records), *by_date],
     ):  # fmt: skip
         if tool(["tools/harvest_orders.py", *step]) != 0:
             note(a.progress, f"STOPPED: {step[0]} failed")

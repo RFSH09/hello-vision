@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,54 @@ def save_evidence(
                 cv2.imwrite(str(out / name), frame[y1:y2, x1:x2])
 
 
+def test_title(train_records: Sequence[OrderRecord], test_records: Sequence[OrderRecord]) -> str:
+    """Name the test set truthfully: whether its fridges were seen in training."""
+    shared = {r.fridge_key for r in train_records} & {r.fridge_key for r in test_records}
+    return (
+        "Test (new days; fridges also seen in training)"
+        if shared
+        else ("Test (unseen fridges and days)")
+    )
+
+
+def less_seen_section(
+    train_records: Sequence[OrderRecord],
+    test_records: Sequence[OrderRecord],
+    truth: dict[str, dict[str, int]],
+    carts: dict[str, dict[str, int]],
+    classes: Sequence[str],
+    flagged: set[str],
+    limit: int = 50,
+) -> list[str]:
+    """Test results for fridges with few training orders next to the other fridges."""
+    seen = Counter(r.fridge_key for r in train_records)
+    groups = {
+        f"fridges with fewer than {limit} training orders": [
+            r for r in test_records if seen[r.fridge_key] < limit
+        ],
+        f"fridges with {limit} or more": [r for r in test_records if seen[r.fridge_key] >= limit],
+    }
+    lines = [
+        "",
+        "## Less-seen fridges (a rough signal)",
+        "",
+        "| test group | fridges | orders | wrong-charge rate | review rate | exact (all) |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for name, members in groups.items():
+        if not members:
+            lines.append(f"| {name} | 0 | 0 | - | - | - |")
+            continue
+        ids = [r.order_id for r in members]
+        part = evaluate_carts({i: truth[i] for i in ids}, carts, classes, flagged & set(ids))
+        wrong = f"{part.false_charge_rate:.1%}" if part.auto_sessions else "nothing charged"
+        lines.append(
+            f"| {name} | {len({r.fridge_key for r in members})} | {len(members)} | {wrong} | "
+            f"{part.review_rate:.1%} | {part.exact:.1%} |"
+        )
+    return lines
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -75,6 +124,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--sizes", type=int, nargs="*", default=[], help="learning-curve sizes")
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument(
+        "--less-seen", type=int, default=50, help="training orders below which a fridge is rare"
+    )
     args = parser.parse_args(argv)
 
     records = [
@@ -127,7 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = [
         "# Session model: first evaluation",
         "",
-        to_markdown(final, "Test (unseen fridges and days)"),
+        to_markdown(final, test_title(parts["train"], parts["test"])),
     ]
     report += [
         "## Charging rule",
@@ -156,6 +208,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"test {len(parts['test'])}. Left out of val/test because a product line was "
         f"unknown: {incomplete}.",
     ]
+    (args.out / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+    report += less_seen_section(
+        parts["train"], parts["test"], truth, carts, classes, flagged, args.less_seen
+    )
     (args.out / "report.md").write_text("\n".join(report) + "\n", encoding="utf-8")
     by_id = {r.order_id: r for r in parts["test"]}
     with (args.out / "disagreements.csv").open("w", encoding="utf-8", newline="") as fh:

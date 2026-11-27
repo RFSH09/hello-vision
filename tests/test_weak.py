@@ -24,7 +24,7 @@ from hello_vision.weak.records import (
     load_records,
     read_export,
 )
-from hello_vision.weak.splits import select_for_download, split_orders
+from hello_vision.weak.splits import select_for_download, split_by_date, split_orders
 from tools.harvest_orders import main as harvest_main
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -288,3 +288,38 @@ def test_false_charges_count_only_automatic_charges() -> None:
     nothing = evaluate_carts(truth, pred, ["a", "b"], flagged=set(truth))
     assert nothing.auto_sessions == 0 and "NOTHING was charged" in to_markdown(nothing, "t")
     assert "0.0%** (" not in to_markdown(nothing, "t")
+
+
+def test_date_split_excludes_nothing(tmp_path: Path) -> None:
+    records = [record(i, f"f{i % 3}", i % 7) for i in range(70)]  # 2026-09-01 .. 09-07
+    out = split_by_date(records, date(2026, 9, 6), date(2026, 9, 7))
+    assert set(out.values()) == {"train", "val", "test"} and len(out) == 70
+    by = {
+        s: {r.date.day for r in records if out[r.order_id] == s} for s in ("train", "val", "test")
+    }
+    assert by == {"train": {1, 2, 3, 4, 5}, "val": {6}, "test": {7}}
+    with pytest.raises(ValueError, match="before"):
+        split_by_date(records, date(2026, 9, 7), date(2026, 9, 7))
+    with pytest.raises(ValueError, match="no orders for: test"):
+        split_by_date(records, date(2026, 9, 6), date(2026, 10, 1))
+    store = tmp_path / "o.jsonl"
+    for r in records:
+        append_record(store, r)
+    dates = ["--val-from", "2026-09-06", "--test-from", "2026-09-07"]
+    assert harvest_main(["split", "--records", str(store), *dates]) == 0
+    assert json.loads((tmp_path / "splits.json").read_text()) == out
+    assert harvest_main(["split", "--records", str(store), "--val-from", "2026-09-06"]) == 2
+
+
+def test_less_seen_fridges_are_reported_separately() -> None:
+    from tools.train_mil import less_seen_section, test_title
+
+    train = [record(i, "busy") for i in range(3)] + [record(9, "rare")]
+    test = [record(20, "busy"), record(21, "rare"), record(22, "new")]
+    truth = {r.order_id: {"a": 1} for r in test}
+    carts = {"o20": {"a": 1}, "o21": {"b": 1}, "o22": {}}
+    text = "\n".join(less_seen_section(train, test, truth, carts, ["a", "b"], {"o22"}, limit=2))
+    assert "| fridges with fewer than 2 training orders | 2 | 2 | 100.0% | 50.0% | 0.0% |" in text
+    assert "| fridges with 2 or more | 1 | 1 | 0.0% | 0.0% | 100.0% |" in text
+    assert "seen in training" in test_title(train, test)
+    assert "unseen" in test_title(train, [record(30, "other")])

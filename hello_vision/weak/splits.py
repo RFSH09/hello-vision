@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
+from datetime import date
 
 from hello_vision.weak.records import OrderRecord
 
@@ -32,6 +33,30 @@ def select_for_download(
     usable = [r for r in records if assignment.get(r.order_id) in priority]
     usable.sort(key=lambda r: (priority[assignment[r.order_id]], -r.date.toordinal(), r.order_id))
     return usable[:limit]
+
+
+def split_by_date(
+    records: Sequence[OrderRecord], val_from: date, test_from: date
+) -> dict[str, str]:
+    """Split by DATE only; nothing is excluded and every fridge may appear in every split.
+
+    Orders before ``val_from`` are train, from ``val_from`` up to ``test_from`` validation,
+    and from ``test_from`` on test. Weaker than :func:`split_orders`: it measures new days,
+    not new fridges.
+
+    Raises:
+        ValueError: The dates are out of order or a split would be empty.
+    """
+    if not val_from < test_from:
+        raise ValueError("val_from must be before test_from")
+    out = {
+        r.order_id: "test" if r.date >= test_from else "val" if r.date >= val_from else "train"
+        for r in records
+    }
+    empty = [s for s in ("train", "val", "test") if s not in out.values()]
+    if empty:
+        raise ValueError(f"no orders for: {', '.join(empty)}")
+    return out
 
 
 def split_orders(

@@ -22,11 +22,17 @@ import shutil
 import urllib.parse
 from collections import Counter
 from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 
 from hello_vision.weak.harvest import RateLimiter, admin_opener, download_videos, get, redact
 from hello_vision.weak.records import SkuMapper, UnknownProductError, load_records, read_export
-from hello_vision.weak.splits import SPLITS, select_for_download, split_orders
+from hello_vision.weak.splits import (
+    SPLITS,
+    select_for_download,
+    split_by_date,
+    split_orders,
+)
 
 ADMIN_HOSTS = {"osonvend.uz", "www.osonvend.uz"}
 
@@ -100,7 +106,15 @@ def download(args: argparse.Namespace) -> int:
 def split(args: argparse.Namespace) -> int:
     """Write ``splits.json`` next to the records."""
     records = load_records(args.records)
-    assignment = split_orders(records, seed=args.seed)
+    if bool(args.val_from) != bool(args.test_from):
+        print("STOPPED: give both --val-from and --test-from, or neither")
+        return 2
+    if args.val_from:
+        assignment = split_by_date(records, args.val_from, args.test_from)
+        print("split by DATE only (all fridges; nothing excluded)")
+    else:
+        assignment = split_orders(records, seed=args.seed)
+        print("split by fridge AND date")
     target = args.records.with_name("splits.json")
     target.write_text(json.dumps(assignment), encoding="utf-8")
     counts = Counter(assignment.values())
@@ -149,6 +163,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = sub.add_parser("split")
     p.add_argument("--records", type=Path, required=True)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--val-from", type=date.fromisoformat, help="date split: first val day")
+    p.add_argument("--test-from", type=date.fromisoformat, help="date split: first test day")
     p.set_defaults(run=split)
     args = parser.parse_args(argv)
     result: int = args.run(args)
