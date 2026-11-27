@@ -14,7 +14,12 @@ from pydantic import ValidationError
 from hello_vision.synth.session import write_video
 from hello_vision.weak.features import dequantise, extract_session, motion_frames, quantise
 from hello_vision.weak.harvest import RateLimiter, download_videos, get, redact
-from hello_vision.weak.metrics import evaluate_carts, to_markdown
+from hello_vision.weak.metrics import (
+    evaluate_carts,
+    less_seen_section,
+    to_markdown,
+)
+from hello_vision.weak.metrics import test_title as set_title
 from hello_vision.weak.records import (
     EXPORT_COLUMNS,
     OrderRecord,
@@ -312,8 +317,6 @@ def test_date_split_excludes_nothing(tmp_path: Path) -> None:
 
 
 def test_less_seen_fridges_are_reported_separately() -> None:
-    from tools.train_mil import less_seen_section, test_title
-
     train = [record(i, "busy") for i in range(3)] + [record(9, "rare")]
     test = [record(20, "busy"), record(21, "rare"), record(22, "new")]
     truth = {r.order_id: {"a": 1} for r in test}
@@ -321,5 +324,5 @@ def test_less_seen_fridges_are_reported_separately() -> None:
     text = "\n".join(less_seen_section(train, test, truth, carts, ["a", "b"], {"o22"}, limit=2))
     assert "| fridges with fewer than 2 training orders | 2 | 2 | 100.0% | 50.0% | 0.0% |" in text
     assert "| fridges with 2 or more | 1 | 1 | 0.0% | 0.0% | 100.0% |" in text
-    assert "seen in training" in test_title(train, test)
-    assert "unseen" in test_title(train, [record(30, "other")])
+    assert "seen in training" in set_title(train, test)
+    assert "unseen" in set_title(train, [record(30, "other")])

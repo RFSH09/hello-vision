@@ -6,6 +6,8 @@ from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 
+from hello_vision.weak.records import OrderRecord
+
 OTHER = "other"
 
 
@@ -115,3 +117,51 @@ def to_markdown(report: CartReport, title: str) -> str:
     lines += ["", "Confused (true -> predicted):"]
     lines += [f"- {t} -> {p}: {n}" for (t, p), n in report.confusion.most_common(10)] or ["- none"]
     return "\n".join(lines) + "\n"
+
+
+def test_title(train_records: Sequence[OrderRecord], test_records: Sequence[OrderRecord]) -> str:
+    """Name the test set truthfully: whether its fridges were seen in training."""
+    shared = {r.fridge_key for r in train_records} & {r.fridge_key for r in test_records}
+    return (
+        "Test (new days; fridges also seen in training)"
+        if shared
+        else ("Test (unseen fridges and days)")
+    )
+
+
+def less_seen_section(
+    train_records: Sequence[OrderRecord],
+    test_records: Sequence[OrderRecord],
+    truth: dict[str, dict[str, int]],
+    carts: dict[str, dict[str, int]],
+    classes: Sequence[str],
+    flagged: set[str],
+    limit: int = 50,
+) -> list[str]:
+    """Test results for fridges with few training orders next to the other fridges."""
+    seen = Counter(r.fridge_key for r in train_records)
+    groups = {
+        f"fridges with fewer than {limit} training orders": [
+            r for r in test_records if seen[r.fridge_key] < limit
+        ],
+        f"fridges with {limit} or more": [r for r in test_records if seen[r.fridge_key] >= limit],
+    }
+    lines = [
+        "",
+        "## Less-seen fridges (a rough signal)",
+        "",
+        "| test group | fridges | orders | wrong-charge rate | review rate | exact (all) |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for name, members in groups.items():
+        if not members:
+            lines.append(f"| {name} | 0 | 0 | - | - | - |")
+            continue
+        ids = [r.order_id for r in members]
+        part = evaluate_carts({i: truth[i] for i in ids}, carts, classes, flagged & set(ids))
+        wrong = f"{part.false_charge_rate:.1%}" if part.auto_sessions else "nothing charged"
+        lines.append(
+            f"| {name} | {len({r.fridge_key for r in members})} | {len(members)} | {wrong} | "
+            f"{part.review_rate:.1%} | {part.exact:.1%} |"
+        )
+    return lines
