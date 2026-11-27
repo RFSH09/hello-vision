@@ -76,6 +76,72 @@ def find_runs(out: Path) -> dict[str, dict[str, Any]]:
     return runs
 
 
+def session_run(path: Path, stems: set[str]) -> dict[str, Any]:
+    """A run of the session model (carts per order), shaped like the other runs.
+
+    ``path`` holds ``{name, note, orders: {id: {predicted, actual, flagged, videos}}}``, where
+    ``actual`` is the cart mapped to the model's classes and ``videos`` maps a camera video
+    to the frames the model weighted most.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    videos: dict[str, Any] = {}
+    views: dict[str, Any] = {}
+    scores: dict[str, OrderScore] = {}
+    for order, item in data["orders"].items():
+        score = OrderScore(order, Counter(item["predicted"]), Counter(item["actual"]))
+        scores[order] = score
+        status = "right" if score.exact else "partly" if score.correct else "wrong"
+        if item["flagged"]:
+            status = "review"
+        views[order] = {
+            "predicted": item["predicted"],
+            "actual": item["actual"],
+            "probabilities": item.get("probabilities", {}),
+            "unknown": 0,
+            "status": status,
+        }
+        views[order].update(correct=score.correct, wrong=score.wrong, missed=score.missed)
+        for stem, tracks in item["videos"].items():
+            if stem in stems:
+                videos[stem] = {"tracks": tracks, "hands": None}
+    cells: dict[str, dict[str, Any]] = {}
+    for order, s in scores.items():
+        pairs = Counter({(sku, sku): n for sku, n in (s.predicted & s.actual).items()})
+        pairs.update(confused_pairs([s]))
+        if not s.predicted - s.actual:
+            pairs.update({(sku, ""): 1 for sku in s.actual - s.predicted})
+        for (truth, pred), n in pairs.items():
+            cell = cells.setdefault(f"{truth}|{pred}", {"n": 0, "orders": []})
+            cell["n"] += n
+            cell["orders"].append(order)
+    correct = sum(s.correct for s in scores.values())
+    actual = sum(sum(s.actual.values()) for s in scores.values())
+    return {
+        "name": data["name"],
+        "note": data["note"],
+        "about_orders": {
+            o: {"fridge": item.get("fridge", ""), "items": item.get("items", item["actual"])}
+            for o, item in data["orders"].items()
+        },
+        "boxes": True,
+        "videos": videos,
+        "orders": views,
+        "summary": {
+            "orders": len(scores),
+            "exact": sum(views[o]["status"] == "right" for o in scores),
+            "correct": correct,
+            "wrong": sum(s.wrong for s in scores.values()),
+            "missed": actual - correct,
+            "actual": actual,
+            "fps": "-",
+            "review": sum(v["status"] == "review" for v in views.values()),
+            "confusion": cells,
+        },
+        "mistakes": [],
+        "flagged": [],
+    }
+
+
 def best_box(track: dict[str, Any]) -> list[float] | None:
     """The box used for the inspector crop: highest detector score, held ones first."""
     boxes = track.get("boxes") or []
@@ -395,19 +461,35 @@ def build(data: Path, out: Path, use_models: bool = True, labels: Path | None = 
         )
         payload_runs[key] = entry
 
+    # the session model may cover many more orders, whose videos sit with the order history
+    files = {p.stem: p for p in (data / "history" / "videos").glob("*.mp4")}
+    files.update({p.stem: p for p in videos.glob("*.mp4")})
+    session_keys: list[str] = []
+    extra: dict[str, dict[str, Any]] = {}  # fridge and items of orders orders.csv lacks
+    for path in sorted((out / "session").glob("*.json"), reverse=True):
+        run = session_run(path, set(files))
+        extra.update(run.pop("about_orders"))
+        stems.update(run["videos"])
+        payload_runs[path.stem] = run
+        session_keys.append(path.stem)
+    if session_keys:
+        with PILImage.new("RGB", (120, 120), (90, 90, 90)) as blank:
+            blank.save(viewer / "thumbs" / "other.jpg")
+
     order_list: dict[str, dict[str, Any]] = {}
     for stem in sorted(stems):
         o = order_id(stem)
+        known = extra.get(o, {})
         item = order_list.setdefault(
             o,
             {
                 "id": o,
-                "fridge": manifest.get(o, {}).get("fridge_key", ""),
-                "actual": dict(orders[o]) if o in orders else None,
+                "fridge": manifest.get(o, {}).get("fridge_key", "") or known.get("fridge", ""),
+                "actual": dict(orders[o]) if o in orders else known.get("items"),
                 "videos": [],
             },
         )
-        source = videos / f"{stem}.mp4"
+        source = files.get(stem, videos / f"{stem}.mp4")
         relative = Path(os.path.relpath(source, viewer)).as_posix()  # works from file://
         item["videos"].append({"stem": stem, "src": relative, **video_info(source)})
     payload = {
@@ -416,7 +498,7 @@ def build(data: Path, out: Path, use_models: bool = True, labels: Path | None = 
         "skus": skus,
         "shelfLine": SHELF_LINE,
         "idThreshold": 0.35,
-        "order": [k for k in ("gdino", "before", "owlv2") if k in payload_runs],
+        "order": session_keys + [k for k in ("gdino", "before", "owlv2") if k in payload_runs],
         "idMargin": 0.02,
     }
     template = (Path(__file__).parent / "viewer_template.html").read_text(encoding="utf-8")

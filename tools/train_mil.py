@@ -4,8 +4,10 @@
         --features E:/hello-features --videos E:/hello-videos --out out/mil --top 10 \
         --sizes 1000 3000 10000
 
-Writes ``report.md`` (test metrics, learning curve), ``disagreements.csv`` and, for those
-orders, the frames the model attended to (``evidence/``; private, never commit).
+Writes ``report.md`` (test metrics, learning curve) and ``disagreements.csv``. No frames are
+saved unless ``--evidence-face-model`` is given; then the frames the model attended to go to
+``evidence/`` with detected faces blurred. The detector misses some overhead and sideways
+faces, so treat that folder as private personal data: never commit or share it.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from typing import Any
 import cv2
 import numpy as np
 
+from hello_vision.privacy.blur import FaceBlurrer, YuNetFaceDetector
 from hello_vision.weak.metrics import (
     evaluate_carts,
     less_seen_section,
@@ -47,9 +50,10 @@ def save_evidence(
     features: Path,
     videos: Path,
     out: Path,
+    blurrer: FaceBlurrer,
     top: int = 3,
 ) -> None:
-    """Save the crops with the highest attention for each class in ``wanted``."""
+    """Save face-blurred crops with the highest attention for each class in ``wanted``."""
     with np.load(features / f"{record.order_id}.npz") as d:
         cams, times, boxes = d["cam"], d["time"], d["box"]
     for sku in wanted:
@@ -62,6 +66,8 @@ def save_evidence(
             ok, frame = cap.read()
             cap.release()
             if ok:
+                rgb = blurrer.blur(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.uint8))
+                frame = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                 x1, y1, x2, y2 = (int(v) for v in boxes[k])
                 out.mkdir(parents=True, exist_ok=True)
                 name = f"{record.order_id}_{sku}_{rank}_{weights[k]:.2f}.jpg"
@@ -83,7 +89,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--less-seen", type=int, default=50, help="training orders below which a fridge is rare"
     )
+    parser.add_argument(
+        "--evidence-face-model",
+        type=Path,
+        help="YuNet .onnx: also save attended frames, faces blurred with it (it misses some)",
+    )
     args = parser.parse_args(argv)
+    blurrer = (
+        FaceBlurrer(YuNetFaceDetector(args.evidence_face_model))
+        if args.evidence_face_model
+        else None
+    )
 
     records = [
         r for r in load_records(args.records) if (args.features / f"{r.order_id}.npz").exists()
@@ -179,11 +195,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             writer.writerow(
                 [order, r.fridge_key, r.date, json.dumps(charged), json.dumps(carts[order])]
             )
-            wanted = sorted(set(charged) | set(carts[order]))
-            save_evidence(
-                r, attention[order], classes, wanted, args.features, args.videos,
-                args.out / "evidence",
-            )  # fmt: skip
+            if blurrer is not None:
+                wanted = sorted(set(charged) | set(carts[order]))
+                save_evidence(
+                    r, attention[order], classes, wanted, args.features, args.videos,
+                    args.out / "evidence", blurrer,
+                )  # fmt: skip
     print("\n".join(report))
     return 0
 

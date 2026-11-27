@@ -21,6 +21,7 @@ aside input{width:100%;margin:8px 0}
 .order{display:block;width:100%;text-align:left;margin-bottom:6px;background:var(--deep)}
 .order.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .order .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.badge.review{background:#ffd24d}
 .badge{font-size:11px;border-radius:99px;padding:1px 8px;color:#161616;font-weight:700;white-space:nowrap}
 .right{background:var(--accent)}.partly{background:var(--yellow)}.wrong{background:var(--red)}.nodata{background:#9aa0aa}
 .thumbs{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}.thumb{position:relative}.thumb img{width:34px;height:34px;object-fit:contain;background:#fff;border-radius:4px;display:block}
@@ -143,7 +144,7 @@ function renderStats() {
     stat(pct(s.correct, s.correct + s.wrong), "item precision"),
     stat(String(s.missed), "missed items"),
     stat(String(s.wrong), "wrong items"),
-    stat(String(s.fps), "processed fps"));
+    s.review === undefined ? stat(String(s.fps), "processed fps") : stat(String(s.review), "sent to review"));
   $("detectors").replaceChildren(...(runKeys.length > 1 ? runKeys.map(k => el("button",
     {class: k === S.run ? "on" : "", onclick: () => { S.run = k; S.track = null; renderAll(); }},
     `${D.runs[k].name} (${s_orders(k)} orders)`)) : []));
@@ -162,12 +163,13 @@ function visibleOrders() {
 }
 function renderList() {
   const names = {all: "all", right: "right", partly: "partly", wrong: "wrong"};
+  if (run().summary.review) names.review = "review";
   $("filters").replaceChildren(...Object.entries(names).map(([k, label]) => el("button",
     {class: S.filter === k ? "on" : "", onclick: () => { S.filter = k; renderList(); }}, label)));
   const list = visibleOrders();
   $("list").replaceChildren(...list.map(o => {
     const v = run().orders[o.id];
-    const label = {right: "right", partly: "partly", wrong: "wrong", nodata: "no data"}[v.status];
+    const label = {right: "right", partly: "partly", wrong: "wrong", review: "review", nodata: "no data"}[v.status];
     return el("button", {class: "order" + (o.id === S.order ? " sel" : ""), onclick: () => select(o.id)},
       el("div", {class: "row"}, el("b", {}, o.id), el("span", {class: "badge " + v.status}, label)),
       (run().flagged || []).includes(o.id) ? el("div", {class: "warn note"}, "⚠ multiple items held: check quantity") : null,
@@ -186,9 +188,9 @@ function select(id) {
 function renderOrder() {
   const o = current(); if (!o) return;
   const r = run();
-  const notes = [];
+  const notes = r.note ? [r.note] : [];
   if (!r.boxes) notes.push("This older run saved no per-frame boxes and used earlier rules: carts are shown, overlays and crops are not available.");
-  if (r.boxes && o.videos.some(v => r.videos[v.stem] && !r.videos[v.stem].hands)) notes.push("Hand boxes are not available for this order yet.");
+  if (!r.note && r.boxes && o.videos.some(v => r.videos[v.stem] && !r.videos[v.stem].hands)) notes.push("Hand boxes are not available for this order yet.");
   if (o.videos.some(v => !r.videos[v.stem])) notes.push("Some camera videos have no result in this run.");
   $("runnote").className = notes.length ? "note warn" : "note";
   $("runnote").textContent = notes.join(" ");
@@ -313,7 +315,7 @@ function renderTimeline() {
 function renderCarts() {
   const o = current(), v = run().orders[o.id];
   if (!v) { $("predicted").replaceChildren("No result in this run."); $("actual").replaceChildren(); return; }
-  const actual = o.actual, pred = v.predicted;
+  const actual = v.actual || o.actual, pred = v.predicted;
   const row = (sku, qty, cls, mark, text) => el("div", {class: "item"}, el("span", {class: "mark " + cls}, mark),
     el("img", {src: "thumbs/" + sku + ".jpg", alt: ""}), el("div", {}, el("b", {}, sku), el("div", {class: cls}, `${text} ×${qty}`)));
   const left = [], right = [];
@@ -323,7 +325,9 @@ function renderCarts() {
     if (ok) left.push(row(s, ok, "ok", "✓", "correct"));
     if (n > ok) left.push(row(s, n - ok, "bad", "✗", "wrong"));
   }
-  if (!left.length) left.push(el("p", {class: "note"}, "Nothing."));
+  if (!left.length) left.push(el("p", {class: v.status === "review" ? "miss" : "note"}, v.status === "review" ? "Sent to review: nothing charged." : "Nothing."));
+  const probs = Object.entries(v.probabilities || {}).sort((a, b) => b[1] - a[1]);
+  if (probs.length) left.push(el("p", {class: "note"}, "Probabilities: " + probs.map(([s, p]) => `${s} ${p}`).join(" · ")));
   if (v.unknown) left.push(el("p", {class: "miss"}, `+ ${v.unknown} held item(s) it could not identify (not counted)`));
   if (!actual) right.push(el("p", {class: "note"}, "No order data for this video."));
   else for (const [s, n] of Object.entries(actual)) {
@@ -340,6 +344,11 @@ function renderInspector() {
   const t = data && data.tracks.find(x => x.track_id === S.track.id);
   if (!t) { box.replaceChildren(el("p", {class: "note"}, "Click a timeline bar or a box on a video.")); return; }
   const o = current();
+  if (t.attention !== undefined) {
+    box.replaceChildren(el("b", {}, `${S.track.stem} · ${t.sku}`),
+      el("div", {class: "note"}, `At ${t.first_seen_s}s. Probability for the whole order ${t.confidence}; weight of this frame ${t.attention}.`));
+    return;
+  }
   const head = el("div", {},
     el("b", {}, `${S.track.stem} · track #${t.track_id} → ${t.sku || "unknown"}`),
     el("div", {class: "note"}, `${t.multiple ? "HELD WITH ANOTHER ITEM · " : ""}${t.frames} frames, ${t.first_seen_s}s–${t.last_seen_s}s · ${t.hand_touched ? "touched by a hand" : "never touched"} · ${t.taken_guess ? "counted as taken" : "not counted"} · confidence ${t.confidence}`),
